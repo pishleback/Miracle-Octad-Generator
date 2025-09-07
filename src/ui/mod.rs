@@ -1,0 +1,285 @@
+pub mod point_toggle;
+pub mod sextet_labelling;
+
+mod mog {
+    use eframe::egui::{Color32, Rect, Vec2};
+
+    use crate::logic::finite_field_4::Point as F4Point;
+    use crate::logic::miracle_octad_generator::{BinaryGolayCode, Vector};
+    use std::collections::HashSet;
+    use std::sync::OnceLock;
+
+    static MOG: OnceLock<BinaryGolayCode> = OnceLock::new();
+
+    pub fn mog() -> &'static BinaryGolayCode {
+        MOG.get_or_init(BinaryGolayCode::default)
+    }
+
+    #[derive(Default, Debug, Clone)]
+    pub struct LabelledMOGPoints<T> {
+        entries: [T; 24],
+    }
+
+    impl LabelledMOGPoints<bool> {
+        pub fn count(&self) -> usize {
+            let mut t = 0;
+            for i in 0..24 {
+                if self.entries[i] {
+                    t += 1;
+                }
+            }
+            t
+        }
+
+        pub fn set_all(&mut self, value: bool) {
+            for i in 0..24 {
+                self.entries[i] = value;
+            }
+        }
+
+        pub fn to_vector(&self) -> Vector {
+            Vector::from_fn(|p| self.entries[Vector::point_to_usize(p)])
+        }
+    }
+
+    impl<T> LabelledMOGPoints<T> {
+        pub fn filled(t: &T) -> Self
+        where
+            T: Clone,
+        {
+            Self {
+                entries: std::array::from_fn(|_| t.clone()),
+            }
+        }
+
+        pub fn get(&self, i: usize) -> &T {
+            &self.entries[i]
+        }
+
+        pub fn get_mut(&mut self, i: usize) -> &mut T {
+            &mut self.entries[i]
+        }
+    }
+
+    // Draw an F4 element
+    pub fn draw_f4(
+        ui: &mut eframe::egui::Ui,
+        painter: &eframe::egui::Painter,
+        rect: eframe::egui::Rect,
+        colour: Color32,
+        x: F4Point,
+    ) {
+        let label_size = 0.7 * rect.height();
+        if x == F4Point::Beta {
+            painter.text(
+                rect.center()
+                    + eframe::egui::Vec2 {
+                        x: 0.0,
+                        y: -0.8 * label_size,
+                    },
+                eframe::egui::Align2::CENTER_CENTER,
+                "_",
+                eframe::egui::FontId::proportional(label_size),
+                colour,
+            );
+        }
+        painter.text(
+            rect.center(),
+            eframe::egui::Align2::CENTER_CENTER,
+            match x {
+                F4Point::Zero => "0",
+                F4Point::One => "1",
+                F4Point::Alpha | F4Point::Beta => "ω",
+            },
+            eframe::egui::FontId::proportional(label_size),
+            colour,
+        );
+    }
+
+    pub fn row_to_f4(r: usize) -> F4Point {
+        match r {
+            0 => F4Point::Zero,
+            1 => F4Point::One,
+            2 => F4Point::Alpha,
+            3 => F4Point::Beta,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn sextet_idx_to_colour(i: usize) -> Color32 {
+        match i {
+            0 => Color32::RED,
+            1 => Color32::BLUE,
+            2 => Color32::GREEN,
+            3 => Color32::BROWN,
+            4 => Color32::MAGENTA,
+            5 => Color32::ORANGE,
+            _ => unreachable!(),
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum F4SelectionResult {
+        None,
+        Point(F4Point),
+        Cross,
+    }
+
+    pub fn f4_selection(
+        ui: &mut eframe::egui::Ui,
+        painter: &eframe::egui::Painter,
+        response: &eframe::egui::Response,
+        rect: eframe::egui::Rect,
+        include: impl Into<HashSet<F4Point>>,
+        include_cross: bool,
+    ) -> F4SelectionResult {
+        let include = include.into();
+
+        let top_left = Rect::from_min_max(rect.left_top(), rect.center());
+        let top_right = Rect::from_min_max(rect.center_top(), rect.right_center());
+        let bottom_left = Rect::from_min_max(rect.left_center(), rect.center_bottom());
+        let bottom_right = Rect::from_min_max(rect.center(), rect.right_bottom());
+        let middle = Rect::from_center_size(rect.center(), rect.size() / 3.0);
+
+        let point_rects = [
+            (F4Point::Zero, top_left),
+            (F4Point::One, top_right),
+            (F4Point::Alpha, bottom_left),
+            (F4Point::Beta, bottom_right),
+        ]
+        .into_iter()
+        .filter(|(point, _)| include.contains(point))
+        .collect::<Vec<_>>();
+
+        let mut result = F4SelectionResult::None;
+        for (point, point_rect) in &point_rects {
+            if (response.is_pointer_button_down_on()
+                || response.drag_stopped()
+                || response.clicked())
+                && point_rect.contains(response.interact_pointer_pos().unwrap())
+            {
+                result = F4SelectionResult::Point(*point);
+            }
+        }
+        if include_cross
+            && (response.is_pointer_button_down_on()
+                || response.drag_stopped()
+                || response.clicked())
+            && middle.contains(response.interact_pointer_pos().unwrap())
+        {
+            result = F4SelectionResult::Cross;
+        }
+
+        for (point, point_rect) in point_rects {
+            let colour = if let F4SelectionResult::Point(selected_point) = result {
+                if point == selected_point {
+                    ui.visuals().strong_text_color()
+                } else {
+                    ui.visuals().weak_text_color()
+                }
+            } else {
+                ui.visuals().weak_text_color()
+            };
+            draw_f4(ui, painter, point_rect, colour, point);
+        }
+
+        if include_cross {
+            painter.text(
+                middle.center(),
+                eframe::egui::Align2::CENTER_CENTER,
+                "🗙",
+                eframe::egui::FontId::proportional(0.4 * middle.height()),
+                match result {
+                    F4SelectionResult::Cross => ui.visuals().strong_text_color(),
+                    _ => ui.visuals().weak_text_color(),
+                },
+            );
+        }
+
+        result
+    }
+}
+
+mod grid {
+    use std::collections::HashMap;
+
+    pub type GridCell = (isize, isize);
+
+    pub type GridCellShower<State> = dyn FnOnce(
+        &mut eframe::egui::Ui,
+        &eframe::egui::Response,
+        &eframe::egui::Painter,
+        eframe::egui::Rect,
+        &mut State,
+    );
+
+    pub struct GridVisuals<State> {
+        pad: f32, // The gap between squares
+        elements: HashMap<GridCell, Box<GridCellShower<State>>>,
+    }
+
+    impl<State> Default for GridVisuals<State> {
+        fn default() -> Self {
+            Self {
+                pad: 10.0,
+                elements: HashMap::new(),
+            }
+        }
+    }
+
+    impl<State> GridVisuals<State> {
+        pub fn draw(&mut self, cell: GridCell, shower: Box<GridCellShower<State>>) {
+            self.elements.insert(cell, shower);
+        }
+
+        pub fn show(self, ui: &mut eframe::egui::Ui, mut state: State) {
+            use eframe::egui::{Pos2, Rect, Sense, Vec2};
+
+            if self.elements.is_empty() {
+                return;
+            }
+
+            let min_i = self.elements.keys().map(|(i, j)| *i).min().unwrap();
+            let max_i = self.elements.keys().map(|(i, j)| *i).max().unwrap();
+            let min_j = self.elements.keys().map(|(i, j)| *j).min().unwrap();
+            let max_j = self.elements.keys().map(|(i, j)| *j).max().unwrap();
+            let size_i = max_i - min_i + 1;
+            let size_j = max_j - min_j + 1;
+
+            let (response, painter) = ui.allocate_painter(
+                {
+                    let available = ui.available_size();
+                    let mut size = Vec2 {
+                        x: available.x,
+                        y: (size_j as f32 / size_i as f32) * available.x,
+                    };
+                    if size.y > available.y {
+                        size = size * available.y / size.y;
+                    }
+                    size
+                },
+                Sense::click_and_drag(),
+            );
+            let unit = response.rect.width() / (size_i as f32);
+
+            let cell_to_pos = |(i, j): GridCell| -> Pos2 {
+                Pos2 {
+                    x: response.rect.left() + ((i - min_i) as f32 + 0.5) * unit,
+                    y: response.rect.top() + ((j - min_j) as f32 + 0.5) * unit,
+                }
+            };
+
+            for (cell, shower) in self.elements {
+                let pos = cell_to_pos(cell);
+                let rect = Rect::from_center_size(
+                    pos,
+                    Vec2 {
+                        x: unit - self.pad,
+                        y: unit - self.pad,
+                    },
+                );
+                shower(ui, &response, &painter, rect, &mut state);
+            }
+        }
+    }
+}
