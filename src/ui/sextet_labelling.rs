@@ -10,213 +10,6 @@ use crate::{
 };
 use eframe::egui::{Button, CentralPanel, Rect, SidePanel};
 
-// #[derive(Debug)]
-// struct FoursomeLabel {
-//     foursome_idx: usize,
-//     point_idx: usize,
-//     label: F4Point,
-// }
-
-// #[derive(Debug)]
-// enum PartialLabellingState {
-//     Zero,
-//     One {
-//         label: FoursomeLabel,
-//     },
-//     TwoDifferent {
-//         label_1: FoursomeLabel,
-//         label_2: FoursomeLabel,
-//         // Are the two foursomes in one of the three adjacent pairs?
-//         adjacent: bool,
-//     },
-//     TwoSame {
-//         // Two labels
-//         label_1: FoursomeLabel,
-//         label_2: FoursomeLabel,
-//     },
-//     ThreeDifferent {
-//         // These two foursomes are one of the three adjacent pairs
-//         label_1: FoursomeLabel,
-//         label_2: FoursomeLabel,
-//         // This is one of the other 4 foursomes
-//         label_3: FoursomeLabel,
-//     },
-//     ThreeSame {
-//         // These two labels are on the same foursome
-//         label_1: FoursomeLabel,
-//         label_2: FoursomeLabel,
-//         // This is one of the other 5 foursomes
-//         label_3: FoursomeLabel,
-//         // Are the two foursomes in one of the three adjacent pairs?
-//         adjacent: bool,
-//     },
-//     Four {
-//         // This foursome has exactly 1 label set
-//         label_1: FoursomeLabel,
-//         // These labels are on the same foursome and are adjacent to the first foursome
-//         label_2: FoursomeLabel,
-//         label_3: FoursomeLabel,
-//         // Any of the other 4 foursomes
-//         label_4: FoursomeLabel,
-//     },
-//     // The labels are over constrained
-//     Invalid,
-// }
-
-// impl PartialLabellingState {
-//     fn add_label(self, new_label: FoursomeLabel, ordering: &Vec<usize>) -> Self {
-//         let are_adjacent = |foursome_idx_1: usize, foursome_idx_2: usize| {
-//             debug_assert_ne!(foursome_idx_1, foursome_idx_2);
-//             ordering.iter().position(|i| *i == foursome_idx_1).unwrap() / 2
-//                 == ordering.iter().position(|i| *i == foursome_idx_2).unwrap() / 2
-//         };
-
-//         match self {
-//             PartialLabellingState::Zero => Self::One { label: new_label },
-//             PartialLabellingState::One { label } => {
-//                 debug_assert_ne!(label.point_idx, new_label.point_idx);
-//                 if label.foursome_idx == new_label.foursome_idx {
-//                     Self::TwoSame {
-//                         label_1: label,
-//                         label_2: new_label,
-//                     }
-//                 } else {
-//                     let adjacent = are_adjacent(label.foursome_idx, new_label.foursome_idx);
-//                     Self::TwoDifferent {
-//                         label_1: label,
-//                         label_2: new_label,
-//                         adjacent,
-//                     }
-//                 }
-//             }
-//             PartialLabellingState::TwoDifferent {
-//                 label_1,
-//                 label_2,
-//                 adjacent,
-//             } => {
-//                 debug_assert_ne!(label_1.foursome_idx, label_2.foursome_idx);
-//                 debug_assert_ne!(label_1.point_idx, new_label.point_idx);
-//                 debug_assert_ne!(label_2.point_idx, new_label.point_idx);
-//                 if label_1.foursome_idx == new_label.foursome_idx {
-//                     #[allow(clippy::redundant_field_names)]
-//                     Self::ThreeSame {
-//                         label_1: label_1,
-//                         label_2: new_label,
-//                         label_3: label_2,
-//                         adjacent,
-//                     }
-//                 } else if label_2.foursome_idx == new_label.foursome_idx {
-//                     Self::ThreeSame {
-//                         label_1: label_2,
-//                         label_2: new_label,
-//                         label_3: label_1,
-//                         adjacent,
-//                     }
-//                 } else if adjacent {
-//                     Self::ThreeDifferent {
-//                         label_1,
-//                         label_2,
-//                         label_3: new_label,
-//                     }
-//                 } else if are_adjacent(label_1.foursome_idx, new_label.foursome_idx) {
-//                     #[allow(clippy::redundant_field_names)]
-//                     Self::ThreeDifferent {
-//                         label_1: label_1,
-//                         label_2: new_label,
-//                         label_3: label_2,
-//                     }
-//                 } else if are_adjacent(label_2.foursome_idx, new_label.foursome_idx) {
-//                     Self::ThreeDifferent {
-//                         label_1: label_2,
-//                         label_2: new_label,
-//                         label_3: label_1,
-//                     }
-//                 } else {
-//                     // The 3 labels all belong to different ones of the 3 pairs
-//                     Self::Invalid
-//                 }
-//             }
-//             PartialLabellingState::TwoSame { label_1, label_2 } => {
-//                 let foursome_idx = label_1.foursome_idx;
-//                 debug_assert_eq!(foursome_idx, label_2.foursome_idx);
-//                 if new_label.foursome_idx == foursome_idx {
-//                     Self::Invalid
-//                 } else {
-//                     let adjacent = are_adjacent(new_label.foursome_idx, foursome_idx);
-//                     Self::ThreeSame {
-//                         label_1,
-//                         label_2,
-//                         label_3: new_label,
-//                         adjacent,
-//                     }
-//                 }
-//             }
-//             PartialLabellingState::ThreeDifferent {
-//                 label_1,
-//                 label_2,
-//                 label_3,
-//             } => {
-//                 if new_label.foursome_idx == label_2.foursome_idx {
-//                     #[allow(clippy::redundant_field_names)]
-//                     Self::Four {
-//                         label_1: label_1,
-//                         label_2: label_2,
-//                         label_3: new_label,
-//                         label_4: label_3,
-//                     }
-//                 } else if new_label.foursome_idx == label_1.foursome_idx {
-//                     Self::Four {
-//                         label_1: label_2,
-//                         label_2: label_1,
-//                         label_3: new_label,
-//                         label_4: label_3,
-//                     }
-//                 } else {
-//                     Self::Invalid
-//                 }
-//             }
-//             PartialLabellingState::ThreeSame {
-//                 label_1,
-//                 label_2,
-//                 label_3,
-//                 adjacent,
-//             } => {
-//                 let foursome_idx_12 = label_1.foursome_idx;
-//                 debug_assert_eq!(foursome_idx_12, label_2.foursome_idx);
-
-//                 if new_label.foursome_idx == foursome_idx_12
-//                     || new_label.foursome_idx == label_3.foursome_idx
-//                 {
-//                     Self::Invalid
-//                 } else if adjacent {
-//                     Self::Four {
-//                         label_1,
-//                         label_2,
-//                         label_3,
-//                         label_4: new_label,
-//                     }
-//                 } else if are_adjacent(foursome_idx_12, new_label.foursome_idx) {
-//                     Self::Four {
-//                         label_1,
-//                         label_2,
-//                         label_3: new_label,
-//                         label_4: label_3,
-//                     }
-//                 } else {
-//                     Self::Invalid
-//                 }
-//             }
-//             PartialLabellingState::Four {
-//                 label_1,
-//                 label_2,
-//                 label_3,
-//                 label_4,
-//             } => Self::Invalid,
-//             PartialLabellingState::Invalid => PartialLabellingState::Invalid,
-//         }
-//     }
-// }
-
 #[derive(Debug)]
 enum PartialLabellingState {
     Underset,
@@ -479,7 +272,56 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                 foursome23,
                 foursome4,
             } => {
-                todo!()
+                let point1 = self.sextet[foursome1]
+                    .points()
+                    .find(|p| *self.labelling.get(Vector::point_to_usize(*p)) == Some(x))
+                    .unwrap();
+                let point2 = self.sextet[foursome23]
+                    .points()
+                    .find(|p| *self.labelling.get(Vector::point_to_usize(*p)) == Some(x))
+                    .unwrap();
+                let point3 = self.sextet[foursome23]
+                    .points()
+                    .find(|p| *self.labelling.get(Vector::point_to_usize(*p)) == Some(y))
+                    .unwrap();
+                let point4 = self.sextet[foursome4]
+                    .points()
+                    .find(|p| *self.labelling.get(Vector::point_to_usize(*p)) == Some(z))
+                    .unwrap();
+
+                println!();
+                println!("{:?}", point1);
+                println!("{:?}", point2);
+                println!("{:?}", point3);
+                println!("{:?}", point4);
+
+                /*
+                The algorithm
+
+                Step1:
+                Complete with
+                 - Point 1 is labelled 0
+                 - Point 2 is labelled 0
+                 - Point 3 is labelled 1
+                 - Point 4 is labelled z
+                using standard MOG algorithm
+
+                Step2:
+                Multiply by λ such that
+                 - Point 1 is labelled 0
+                 - Point 2 is labelled 0
+                 - Point 3 is labelled x+y
+                 - Point 4 is labelled z
+
+                Step3:
+                Add hexacodewords of the form 00λλλλ or λλ00λλ or λλλλ00 so that
+                 - Point 1 is labelled x
+                 - Point 2 is labelled x
+                 - Point 3 is labelled y
+                 - Point 4 is labelled z
+                 */
+
+                None
             }
         }
     }
@@ -526,6 +368,7 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
         }
 
         let allowed_labels = self.allowed_labels();
+        let completed_labels = self.complete_labelling();
 
         struct State<'a> {
             labelling: &'a mut LabelledMOGPoints<Option<F4Point>>,
@@ -553,7 +396,8 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
 
                         // Draw a border when dragging to indicate a label can be set here
                         if response.is_pointer_button_down_on()
-                            && !state.allowed_labels.get(i).is_empty()
+                            && (!state.allowed_labels.get(i).is_empty()
+                                || state.labelling.get(i).is_some())
                         {
                             painter.rect_stroke(
                                 rect,
