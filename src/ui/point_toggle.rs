@@ -29,7 +29,7 @@ impl Default for State {
 
 impl AppState for State {
     fn update(&mut self, ctx: &Context, frame: &mut Frame) -> Option<Box<dyn AppState>> {
-        let mut highlight_points = Labelled::<Point, bool>::new_constant(false);
+        let mut preview_select_points = Labelled::<Point, Option<bool>>::new_constant(None);
         let mut coloured_highlight_points = Labelled::<Point, Option<Color32>>::new_constant(None);
 
         if let Some(new_state) = SidePanel::left("left_panel")
@@ -38,32 +38,116 @@ impl AppState for State {
                 let mog = super::mog::mog();
 
                 // Clear selection
-                if self.selected_points.weight() != 0 && ui.button("Clear").clicked() {
-                    self.selected_points.set_all(false);
+                if self.selected_points.weight() != 0 {
+                    ui.heading("Clear selection");
+                    let button = ui.button("Clear");
+
+                    if button.hovered() {
+                        for p in self.selected_points.points() {
+                            preview_select_points.set(p, Some(false));
+                        }
+                    }
+
+                    if button.clicked() {
+                        self.selected_points.set_all(false);
+                    }
                 }
 
-                // Is it a codeword?
-                ui.heading("Is it a codeword?");
+                // The nearest codeword(s)
+                let nearest = mog.nearest_codeword(&self.selected_points);
+                match nearest {
+                    NearestCodewordsResult::Unique { codeword, distance } => {
+                        if distance == 0 {
+                            ui.heading("It's a Codeword");
+                        } else {
+                            ui.heading("Nearest Codeword");
+                            ui.label(format!("Distance = {}", distance));
 
-                if mog.is_codeword(&self.selected_points) {
-                    ui.add_enabled(false, Button::new("Yes").fill(Color32::GREEN));
-                } else {
-                    ui.add_enabled(false, Button::new("No").fill(Color32::RED));
+                            let button = ui.button("Select");
+                            // Preview octad when hovering on button
+                            if button.hovered() {
+                                for p in (&self.selected_points + &codeword).points() {
+                                    preview_select_points.set(p, Some(*codeword.get(p)));
+                                }
+                            }
+                            // Complete the selection
+                            if button.clicked() {
+                                for p in (&self.selected_points + &codeword).points() {
+                                    self.selected_points.set(p, *codeword.get(p));
+                                }
+                            }
+                        }
+                    }
+                    NearestCodewordsResult::Six { codewords } => {
+                        ui.heading("Nearest Codewords");
+                        ui.label("Distance = 4");
+                        for (num, codeword) in codewords.iter().enumerate() {
+                            let button = ui.button(format!("Select {}", num + 1));
+                            // Preview octad when hovering on button
+                            if button.hovered() {
+                                for p in (&self.selected_points + codeword).points() {
+                                    preview_select_points.set(p, Some(*codeword.get(p)));
+                                }
+                            }
+                            // Complete the selection
+                            if button.clicked() {
+                                for p in (&self.selected_points + codeword).points() {
+                                    self.selected_points.set(p, *codeword.get(p));
+                                }
+                            }
+                        }
+
+                        // Complete a sextet from 4 points
+                        ui.heading("Complete Sextet");
+                        if self.selected_points.weight() == 4 {
+                            ui.label("The unique sextet containing these 4 points");
+                        } else {
+                            ui.label(
+                                "\
+The sextet whose foursomes are the differences between these points and the nearest 6 codewords",
+                            );
+                        }
+                        let complete_sextet_button = ui.button("Select");
+
+                        let mut sextet = codewords
+                            .iter()
+                            .map(|codeword| &self.selected_points + codeword)
+                            .collect::<Vec<_>>();
+                        sextet.sort_unstable();
+                        sextet.reverse();
+                        let ordered_sextet = sextet;
+
+                        if complete_sextet_button.hovered() {
+                            for (i, vector) in ordered_sextet.iter().enumerate() {
+                                for p in vector.points() {
+                                    coloured_highlight_points.set(p, Some(sextet_idx_to_colour(i)));
+                                }
+                            }
+                        }
+
+                        if complete_sextet_button.clicked() {
+                            return Some(super::sextet_labelling::State::from_foursome(
+                                self.clone(),
+                                &(&self.selected_points + &codewords[0]),
+                            ));
+                        }
+                    }
                 }
 
                 // Complete and octad from 5 points
                 if self.selected_points.weight() == 5 {
-                    let button = ui.button("Complete Octad");
+                    ui.heading("Complete Octad");
+                    ui.label("The unique octad containing these 5 points");
+                    let button = ui.button("Complete");
 
                     let octad = mog.complete_octad(&self.selected_points).unwrap();
 
                     // Preview octad when hovering on button
                     if button.hovered() {
                         for p in (&self.selected_points + &octad).points() {
-                            highlight_points.set(p, true);
+                            preview_select_points.set(p, Some(true));
                         }
                     }
-
                     // complete the selection
                     if button.clicked() {
                         for p in octad.points() {
@@ -72,34 +156,6 @@ impl AppState for State {
                     }
                 }
 
-                // Complete a sextet from 4 points
-                if self.selected_points.weight() == 4 {
-                    let complete_sextet_button = ui.button("Complete Sextet");
-
-                    let mut sextet = mog
-                        .complete_sextet(&self.selected_points)
-                        .unwrap()
-                        .into_iter()
-                        .collect::<Vec<_>>();
-                    sextet.sort_unstable();
-                    sextet.reverse();
-                    let ordered_sextet = sextet;
-
-                    if complete_sextet_button.hovered() {
-                        for (i, vector) in ordered_sextet.iter().enumerate() {
-                            for p in vector.points() {
-                                coloured_highlight_points.set(p, Some(sextet_idx_to_colour(i)));
-                            }
-                        }
-                    }
-
-                    if complete_sextet_button.clicked() {
-                        return Some(super::sextet_labelling::State::from_foursome(
-                            self.clone(),
-                            &self.selected_points.clone(),
-                        ));
-                    }
-                }
                 None
             })
             .inner
@@ -109,7 +165,7 @@ impl AppState for State {
 
         struct State<'a> {
             selected_points: &'a mut Labelled<Point, bool>,
-            highlight_points: Labelled<Point, bool>,
+            preview_select_points: Labelled<Point, Option<bool>>,
             coloured_highlight_points: Labelled<Point, Option<Color32>>,
         }
 
@@ -131,7 +187,10 @@ impl AppState for State {
             for r in 0..4 {
                 let i = c + 6 * r;
                 let p = Point::usize_to_point(i).unwrap();
-                if *self.selected_points.get(p) || *highlight_points.get(p) {
+                if preview_select_points
+                    .get(p)
+                    .unwrap_or(*self.selected_points.get(p))
+                {
                     t = t + row_to_f4(r);
                 }
             }
@@ -150,7 +209,11 @@ impl AppState for State {
                 (i as isize % 6, i as isize / 6),
                 Box::new(move |ui, response, painter, rect, state| {
                     // Draw square
-                    if *state.selected_points.get(p) || *state.highlight_points.get(p) {
+                    if state
+                        .preview_select_points
+                        .get(p)
+                        .unwrap_or(*state.selected_points.get(p))
+                    {
                         // Selected
                         painter.rect_filled(rect, 10.0, ui.visuals().selection.bg_fill);
                     } else {
@@ -160,7 +223,7 @@ impl AppState for State {
 
                     // Highlight if mouse over
                     // or if in highlight_points
-                    if *state.highlight_points.get(p) || {
+                    if state.preview_select_points.get(p).is_some() || {
                         if let Some(pos) = response.hover_pos() {
                             rect.contains(pos)
                         } else {
@@ -204,7 +267,7 @@ impl AppState for State {
                 ui,
                 State {
                     selected_points: &mut self.selected_points,
-                    highlight_points,
+                    preview_select_points,
                     coloured_highlight_points,
                 },
             );

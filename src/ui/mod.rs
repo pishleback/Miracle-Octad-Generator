@@ -2,10 +2,9 @@ pub mod point_toggle;
 pub mod sextet_labelling;
 
 mod mog {
-    use eframe::egui::{Color32, Rect, Vec2};
-
     use crate::logic::finite_field_4::Point as F4Point;
-    use crate::logic::miracle_octad_generator::{BinaryGolayCode, Vector};
+    use crate::logic::miracle_octad_generator::BinaryGolayCode;
+    use eframe::egui::{Color32, Rect};
     use std::collections::HashSet;
     use std::sync::OnceLock;
 
@@ -193,10 +192,10 @@ mod grid {
                 return;
             }
 
-            let min_i = self.elements.keys().map(|(i, j)| *i).min().unwrap();
-            let max_i = self.elements.keys().map(|(i, j)| *i).max().unwrap();
-            let min_j = self.elements.keys().map(|(i, j)| *j).min().unwrap();
-            let max_j = self.elements.keys().map(|(i, j)| *j).max().unwrap();
+            let min_i = self.elements.keys().map(|(i, _)| *i).min().unwrap();
+            let max_i = self.elements.keys().map(|(i, _)| *i).max().unwrap();
+            let min_j = self.elements.keys().map(|(_, j)| *j).min().unwrap();
+            let max_j = self.elements.keys().map(|(_, j)| *j).max().unwrap();
             let size_i = max_i - min_i + 1;
             let size_j = max_j - min_j + 1;
 

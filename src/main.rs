@@ -1,13 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(rustdoc::missing_crate_level_docs)]
 
-use eframe::App;
-use eframe::egui::{
-    self, Button, Color32, FontId, Grid, Painter, Pos2, Rect, Response, Stroke, Ui, Vec2,
-};
+use eframe::egui::{self};
 use eframe::egui::{FontDefinitions, FontFamily};
-use env_logger::fmt::style::Color;
-use std::cell::OnceCell;
 
 mod logic;
 

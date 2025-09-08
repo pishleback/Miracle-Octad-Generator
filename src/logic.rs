@@ -89,9 +89,7 @@ pub mod permutation {
 }
 
 pub mod traits {
-    use eframe::egui::accesskit::Point;
-
-    use crate::logic::permutation::{self, Permutation};
+    use crate::logic::permutation::Permutation;
     use std::{borrow::Borrow, marker::PhantomData};
 
     pub trait Enumerated: Sized {
@@ -113,7 +111,7 @@ pub mod traits {
         pub fn from_fn(components: impl Fn(Point) -> T) -> Self {
             Self {
                 _length: PhantomData,
-                components: Point::points().map(|p| components(p)).collect(),
+                components: Point::points().map(components).collect(),
             }
         }
 
@@ -186,7 +184,7 @@ pub mod traits {
 pub mod finite_field_4 {
     use std::ops::{Add, Mul};
 
-    use crate::logic::traits::{self, Enumerated};
+    use crate::logic::traits::Enumerated;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub enum Point {
@@ -279,10 +277,7 @@ pub mod finite_field_4 {
 
 pub mod hexacode {
     use super::finite_field_4::Point as F4Point;
-    use crate::logic::{
-        permutation::Permutation,
-        traits::{Enumerated, Labelled},
-    };
+    use crate::logic::traits::{Enumerated, Labelled};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub enum Side {
@@ -406,8 +401,6 @@ pub mod hexacode {
 }
 
 pub mod miracle_octad_generator {
-    use eframe::egui::ahash::HashMap;
-
     use super::finite_field_4::Point as F4Point;
     use crate::logic::{
         hexacode,
@@ -929,6 +922,44 @@ pub mod miracle_octad_generator {
             }
 
             OrderedSextetLabelling { sextet, labels }
+        }
+    }
+
+    pub enum NearestCodewordsResult {
+        Unique { codeword: Vector, distance: usize },
+        Six { codewords: [Vector; 6] },
+    }
+
+    impl NearestCodewordsResult {
+        pub fn distance(&self) -> usize {
+            match self {
+                NearestCodewordsResult::Unique { distance, .. } => *distance,
+                NearestCodewordsResult::Six { .. } => 4,
+            }
+        }
+    }
+
+    impl BinaryGolayCode {
+        pub fn nearest_codeword(&self, vector: &Vector) -> NearestCodewordsResult {
+            let mut dist_4_codewords = vec![];
+            for codeword in &self.codewords {
+                let diff = vector + codeword;
+                let distance = diff.weight();
+                if distance <= 3 {
+                    debug_assert!(dist_4_codewords.is_empty());
+                    return NearestCodewordsResult::Unique {
+                        codeword: codeword.clone(),
+                        distance,
+                    };
+                } else if distance == 4 {
+                    dist_4_codewords.push(codeword);
+                }
+            }
+
+            debug_assert_eq!(dist_4_codewords.len(), 6);
+            NearestCodewordsResult::Six {
+                codewords: std::array::from_fn(|i| dist_4_codewords[i].clone()),
+            }
         }
     }
 }

@@ -6,8 +6,8 @@ use crate::{
     logic::finite_field_4::Point as F4Point,
     ui::mog::{draw_f4, f4_selection, sextet_idx_to_colour},
 };
-use eframe::egui::{Button, CentralPanel, Rect, SidePanel};
-use std::{collections::HashSet, hash::Hash};
+use eframe::egui::{Button, CentralPanel, SidePanel};
+use std::collections::HashSet;
 
 #[derive(Debug)]
 enum PartialLabellingState {
@@ -362,10 +362,7 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                 // Apply an automorphism such that foursome1 is the first foursome, foursome23 is the second foursome, and foursome4 is the third foursome
                 ordered_sextet = ordered_sextet.permute(
                     &Permutation::from_fn(|h: hexacode::Point| match h.pair {
-                        hexacode::Pair::Left => hexacode::Point {
-                            side: h.side,
-                            pair: pair,
-                        },
+                        hexacode::Pair::Left => hexacode::Point { side: h.side, pair },
                         hexacode::Pair::Middle => hexacode::Point {
                             side: h.side,
                             pair: h4.pair,
@@ -443,7 +440,7 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
     fn update(
         &mut self,
         ctx: &eframe::egui::Context,
-        frame: &mut eframe::Frame,
+        _frame: &mut eframe::Frame,
     ) -> Option<Box<dyn AppState>> {
         if let Some(new_state) = SidePanel::left("left_panel")
             .exact_width(200.0)
