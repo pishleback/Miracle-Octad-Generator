@@ -379,25 +379,6 @@ pub mod hexacode {
             *self.get(p)
         }
     }
-
-    // #[derive(Debug, Clone)]
-    // pub enum Action {
-    //     PermutePairs(Permutation<Pair>),
-    //     FlipTwoPairs(Pair, Pair),
-    //     FlipAllPairsAndConjugate,
-    //     Translate(Vector),
-    // }
-
-    // impl Action {
-    //     pub fn inverse(self) -> Self {
-    //         match self {
-    //             Self::PermutePairs(permutation) => Self::PermutePairs(permutation.inverse()),
-    //             Self::FlipTwoPairs(pair1, pair2) => Self::FlipTwoPairs(pair1, pair2),
-    //             Self::FlipAllPairsAndConjugate => Self::FlipAllPairsAndConjugate,
-    //             Self::Translate(vector) => Self::Translate(vector), // vector = -vector
-    //         }
-    //     }
-    // }
 }
 
 pub mod miracle_octad_generator {
