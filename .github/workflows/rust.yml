@@ -1,0 +1,84 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Linux Dependencies
+      run: sudo apt install libfontconfig1-dev
+
+    - name: Check Formatting
+      run: cargo fmt --all -- --check
+
+  # check:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #   - name: Checkout repository
+  #     uses: actions/checkout@v4
+
+  #   - name: Install Linux Dependencies
+  #     run: sudo apt install libfontconfig1-dev
+
+  #   - name: Run Code Debug Checks
+  #     run: cargo check --all-targets --all-features
+  #     env:
+  #       RUSTFLAGS: "-D warnings"
+
+  #   - name: Run Code Release Checks
+  #     run: cargo check --all-targets --all-features --release
+  #     env:
+  #       RUSTFLAGS: "-D warnings"
+
+  # clippy:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #   - name: Checkout repository
+  #     uses: actions/checkout@v4
+
+  #   - name: Install Linux Dependencies
+  #     run: sudo apt install libfontconfig1-dev
+
+  #   - name: Install Clippy
+  #     run: rustup component add clippy
+
+  #   - name: Run Clippy Debug Checks
+  #     run: cargo clippy -- -D warnings
+
+  #   - name: Run Clippy Release Checks
+  #     run: cargo clippy -- -D warnings
+
+  test_debug:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Linux Dependencies
+      run: sudo apt install libfontconfig1-dev
+
+    - name: Run tests in debug
+      run: cargo test --verbose
+
+  test_release:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Linux Dependencies
+      run: sudo apt install libfontconfig1-dev
+
+    - name: Run tests
+      run: cargo test --release --verbose
