@@ -1,6 +1,7 @@
-use crate::logic::permutation::Permutation;
+use crate::logic::permutation::{self, Permutation};
 use crate::logic::traits::{Enumerated, Labelled};
 use crate::logic::{hexacode, miracle_octad_generator::*};
+use crate::ui::grid::{self, GridCell};
 use crate::{
     AppState,
     logic::finite_field_4::Point as F4Point,
@@ -283,7 +284,7 @@ impl<PrevState: AppState + Clone> State<PrevState> {
     }
 
     // Given the labels currently set in self.labelling return the completion to a labelling of the MOG if unique
-    fn complete_labelling(&self) -> Option<Labelled<Point, F4Point>> {
+    fn complete_labelling(&self) -> Option<OrderedSextetLabelling> {
         match self.partial_labelling_state() {
             PartialLabellingState::Underset | PartialLabellingState::Overset => None,
             PartialLabellingState::Perfect {
@@ -327,10 +328,12 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                     .find(|p| *self.labelling.get(*p) == Some(z))
                     .unwrap();
 
+                let mut foursome_perms = vec![];
+
                 // Apply an automorphism such that foursome1 is left and foursome23 is right in their pair
                 if side == hexacode::Side::Right {
                     for p in [pair, empty_pair] {
-                        ordered_sextet = ordered_sextet.permute(&Permutation::new_swap(
+                        foursome_perms.push(Permutation::new_swap(
                             &hexacode::Point {
                                 side: hexacode::Side::Left,
                                 pair: p,
@@ -346,7 +349,7 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                 // Apply an automorphism such that foursome4 is the lefthand foursome in its pair
                 if h4.side == hexacode::Side::Right {
                     for p in [h4.pair, empty_pair] {
-                        ordered_sextet = ordered_sextet.permute(&Permutation::new_swap(
+                        foursome_perms.push(Permutation::new_swap(
                             &hexacode::Point {
                                 side: hexacode::Side::Left,
                                 pair: p,
@@ -360,8 +363,8 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                 }
 
                 // Apply an automorphism such that foursome1 is the first foursome, foursome23 is the second foursome, and foursome4 is the third foursome
-                ordered_sextet = ordered_sextet.permute(
-                    &Permutation::from_fn(|h: hexacode::Point| match h.pair {
+                foursome_perms.push(
+                    Permutation::from_fn(|h: hexacode::Point| match h.pair {
                         hexacode::Pair::Left => hexacode::Point { side: h.side, pair },
                         hexacode::Pair::Middle => hexacode::Point {
                             side: h.side,
@@ -374,6 +377,10 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                     })
                     .inverse(),
                 );
+
+                for perm in &foursome_perms {
+                    ordered_sextet = ordered_sextet.permute(perm);
+                }
 
                 debug_assert_eq!(
                     ordered_sextet.foursome(hexacode::Point {
@@ -430,7 +437,12 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                 debug_assert_eq!(*labelling.labels().get(point3), y);
                 debug_assert_eq!(*labelling.labels().get(point4), z);
 
-                Some(labelling.labels().clone())
+                // Undo the permutation of the foursomes
+                for perm in foursome_perms.into_iter().rev() {
+                    labelling = labelling.permute_foursomes(&perm.inverse());
+                }
+
+                Some(labelling)
             }
         }
     }
@@ -482,17 +494,21 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
         struct State<'a> {
             labelling: &'a mut Labelled<Point, Option<F4Point>>,
             allowed_labels: &'a Labelled<Point, HashSet<F4Point>>,
-            completed_labels: &'a Option<Labelled<Point, F4Point>>,
+            completed_labels: &'a Option<OrderedSextetLabelling>,
         }
+
+        let point_to_cell = |p: Point| -> GridCell {
+            let i = p.point_to_usize();
+            (i as isize % 6, i as isize / 6)
+        };
 
         let mut mog_visuals = super::grid::GridVisuals::<State>::default();
 
         // The 6x4 MOG grid
         for (foursome_idx, foursome) in self.sextet.iter().enumerate() {
             for p in foursome.points() {
-                let i = p.point_to_usize();
-                mog_visuals.draw(
-                    (i as isize % 6, i as isize / 6),
+                mog_visuals.draw_cell(
+                    point_to_cell(p),
                     Box::new(move |ui, response, painter, rect, state| {
                         let colour = sextet_idx_to_colour(foursome_idx);
 
@@ -551,11 +567,25 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
                                 painter,
                                 rect,
                                 ui.visuals().weak_text_color(),
-                                *completed_labels.get(p),
+                                *completed_labels.labels().get(p),
                             );
                         }
                     }),
                 );
+            }
+        }
+
+        if let Some(completed_labels) = &completed_labels {
+            let permutation: Permutation<Point> = Permutation::from_fn(|p| Point {
+                col: *completed_labels.foursomes().get(p),
+                row: *completed_labels.labels().get(p),
+            });
+
+            for p in Point::points() {
+                let q = *permutation.apply(&p);
+                if p != q {
+                    mog_visuals.draw_line(point_to_cell(p), point_to_cell(q));
+                }
             }
         }
 

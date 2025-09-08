@@ -154,7 +154,9 @@ mod mog {
 }
 
 mod grid {
-    use std::collections::HashMap;
+    use std::{cell, collections::HashMap};
+
+    use eframe::egui::{Color32, Stroke};
 
     pub type GridCell = (isize, isize);
 
@@ -169,6 +171,7 @@ mod grid {
     pub struct GridVisuals<State> {
         pad: f32, // The gap between squares
         elements: HashMap<GridCell, Box<GridCellShower<State>>>,
+        lines: Vec<(GridCell, GridCell)>,
     }
 
     impl<State> Default for GridVisuals<State> {
@@ -176,13 +179,18 @@ mod grid {
             Self {
                 pad: 10.0,
                 elements: HashMap::new(),
+                lines: Vec::new(),
             }
         }
     }
 
     impl<State> GridVisuals<State> {
-        pub fn draw(&mut self, cell: GridCell, shower: Box<GridCellShower<State>>) {
+        pub fn draw_cell(&mut self, cell: GridCell, shower: Box<GridCellShower<State>>) {
             self.elements.insert(cell, shower);
+        }
+
+        pub fn draw_line(&mut self, start: GridCell, end: GridCell) {
+            self.lines.push((start, end));
         }
 
         pub fn show(self, ui: &mut eframe::egui::Ui, mut state: State) {
@@ -232,6 +240,27 @@ mod grid {
                     },
                 );
                 shower(ui, &response, &painter, rect, &mut state);
+            }
+
+            for (start, end) in self.lines {
+                let start_pos = cell_to_pos(start);
+                let end_pos = cell_to_pos(end);
+                let vec = end_pos - start_pos;
+                let perp = Vec2 {
+                    x: vec.y,
+                    y: -vec.x,
+                };
+                let start_ctrl = start_pos + 0.3 * (end_pos - start_pos) + 0.1 * perp;
+                let end_ctrl = start_pos + 0.7 * (end_pos - start_pos) + 0.1 * perp;
+
+                let cubic = eframe::egui::epaint::CubicBezierShape::from_points_stroke(
+                    [start_pos, start_ctrl, end_ctrl, end_pos],
+                    false,
+                    Color32::TRANSPARENT,
+                    Stroke::new(10.0, Color32::BLACK * Color32::from_white_alpha(64)),
+                );
+
+                painter.add(eframe::egui::Shape::CubicBezier(cubic));
             }
         }
     }

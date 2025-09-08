@@ -169,11 +169,11 @@ The sextet whose foursomes are the differences between these points and the near
             coloured_highlight_points: Labelled<Point, Option<Color32>>,
         }
 
-        let mut mog_visuals = super::grid::GridVisuals::<State>::default();
+        let mut grid = super::grid::GridVisuals::<State>::default();
 
         // The rows labelled by F4
         for r in 0usize..4 {
-            mog_visuals.draw(
+            grid.draw_cell(
                 (-1, r as isize),
                 Box::new(move |ui, response, painter, rect, state| {
                     draw_f4(ui, painter, rect, ui.visuals().text_color(), row_to_f4(r))
@@ -194,7 +194,7 @@ The sextet whose foursomes are the differences between these points and the near
                     t = t + row_to_f4(r);
                 }
             }
-            mog_visuals.draw(
+            grid.draw_cell(
                 (c as isize, 4),
                 Box::new(move |ui, response, painter, rect, state| {
                     draw_f4(ui, painter, rect, ui.visuals().text_color(), t)
@@ -205,7 +205,7 @@ The sextet whose foursomes are the differences between these points and the near
         // The 6x4 MOG grid
         for p in Point::points() {
             let i = p.point_to_usize();
-            mog_visuals.draw(
+            grid.draw_cell(
                 (i as isize % 6, i as isize / 6),
                 Box::new(move |ui, response, painter, rect, state| {
                     // Draw square
@@ -263,7 +263,7 @@ The sextet whose foursomes are the differences between these points and the near
         }
 
         CentralPanel::default().show(ctx, |ui| {
-            mog_visuals.show(
+            grid.show(
                 ui,
                 State {
                     selected_points: &mut self.selected_points,

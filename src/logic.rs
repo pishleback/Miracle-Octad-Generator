@@ -569,6 +569,10 @@ pub mod miracle_octad_generator {
             &self.labels
         }
 
+        pub fn foursomes(&self) -> Labelled<Point, hexacode::Point> {
+            self.sextet.point_foursomes()
+        }
+
         pub fn permute_foursomes(self, perm: &Permutation<hexacode::Point>) -> Self {
             Self {
                 sextet: self.sextet.permute(perm),
