@@ -1,14 +1,13 @@
-use std::{collections::HashSet, hash::Hash};
-
+use crate::logic::permutation::Permutation;
+use crate::logic::traits::{Enumerated, Labelled};
+use crate::logic::{hexacode, miracle_octad_generator::*};
 use crate::{
     AppState,
-    logic::{
-        finite_field_4::Point as F4Point,
-        miracle_octad_generator::{Point, Vector},
-    },
-    ui::mog::{LabelledMOGPoints, draw_f4, f4_selection, sextet_idx_to_colour},
+    logic::finite_field_4::Point as F4Point,
+    ui::mog::{draw_f4, f4_selection, sextet_idx_to_colour},
 };
 use eframe::egui::{Button, CentralPanel, Rect, SidePanel};
+use std::{collections::HashSet, hash::Hash};
 
 #[derive(Debug)]
 enum PartialLabellingState {
@@ -20,17 +19,13 @@ enum PartialLabellingState {
         x: F4Point,
         y: F4Point,
         z: F4Point,
-        // First foursome
-        //  - Has one point labelled x
-        foursome1: usize,
-        // Second foursome
-        //  - Must form one of the 3 pairs with the first foursome
-        //  - Has one point labelled x and another labelled y
-        foursome23: usize,
-        // Third foursome
-        //  - Must be different from the first 2
-        //  - Has one point labelled z
-        foursome4: usize,
+        // This pair is the pair of foursomes with labels x and x,y
+        pair: hexacode::Pair,
+        // This is the foursome in the pair with just the label x
+        // The other is the foursomes in the pair with the labels x and y
+        side: hexacode::Side,
+        // This is the other foursome with label z
+        third: hexacode::Point,
     },
     Overset,
 }
@@ -38,13 +33,13 @@ enum PartialLabellingState {
 #[derive(Clone)]
 pub struct State<PrevState: AppState + Clone + 'static> {
     prev_state: PrevState,
-    sextet: [Vector; 6],
+    sextet: Vec<Vector>,
     ordering: Vec<usize>, // A permutation of 0..6
-    labelling: LabelledMOGPoints<Option<F4Point>>,
+    labelling: Labelled<Point, Option<F4Point>>,
 }
 
 impl<PrevState: AppState + Clone> State<PrevState> {
-    pub fn from_foursome(prev_state: PrevState, vector: Vector) -> Self {
+    pub fn from_foursome(prev_state: PrevState, vector: &Vector) -> Self {
         let mog = super::mog::mog();
         let mut sextet = mog
             .complete_sextet(vector)
@@ -55,10 +50,22 @@ impl<PrevState: AppState + Clone> State<PrevState> {
         sextet.reverse();
         Self {
             prev_state,
-            sextet: std::array::from_fn(|i| sextet[i].clone()),
+            sextet,
             ordering: (0..6).collect(),
-            labelling: LabelledMOGPoints::default(),
+            labelling: Labelled::new_constant(None),
         }
+    }
+
+    fn get_foursome(&self, foursome: hexacode::Point) -> &Vector {
+        &self.sextet[self
+            .ordering
+            .iter()
+            .position(|i| *i == foursome.point_to_usize())
+            .unwrap()]
+    }
+
+    pub fn ordered_sextet(&self) -> OrderedSextet {
+        OrderedSextet::from_foursomes(Labelled::from_fn(|h| self.get_foursome(h).clone()))
     }
 
     /*
@@ -85,31 +92,32 @@ impl<PrevState: AppState + Clone> State<PrevState> {
 
     which, by standard theory, extends to a unique labelling.
      */
-
     fn partial_labelling_state(&self) -> PartialLabellingState {
-        let are_adjacent = |foursome_idx_1: usize, foursome_idx_2: usize| {
-            debug_assert_ne!(foursome_idx_1, foursome_idx_2);
-            self.ordering
-                .iter()
-                .position(|i| *i == foursome_idx_1)
-                .unwrap()
-                / 2
-                == self
-                    .ordering
-                    .iter()
-                    .position(|i| *i == foursome_idx_2)
-                    .unwrap()
-                    / 2
-        };
+        // let are_adjacent = |foursome_idx_1: usize, foursome_idx_2: usize| {
+        //     debug_assert_ne!(foursome_idx_1, foursome_idx_2);
+        //     self.ordering
+        //         .iter()
+        //         .position(|i| *i == foursome_idx_1)
+        //         .unwrap()
+        //         / 2
+        //         == self
+        //             .ordering
+        //             .iter()
+        //             .position(|i| *i == foursome_idx_2)
+        //             .unwrap()
+        //             / 2
+        // };
 
-        let mut used_labels: [HashSet<F4Point>; 6] = Default::default();
-        for foursome_idx in 0..6 {
-            for point_idx in self.sextet[foursome_idx]
-                .points()
-                .map(Vector::point_to_usize)
-            {
-                if let Some(label) = *self.labelling.get(point_idx)
-                    && !used_labels[foursome_idx].insert(label)
+        let sextet: Labelled<hexacode::Point, Vector> =
+            Labelled::from_fn(|h: hexacode::Point| self.get_foursome(h).clone());
+
+        let mut used_labels: Labelled<hexacode::Point, HashSet<F4Point>> =
+            Labelled::new_constant(HashSet::new());
+
+        for foursome in hexacode::Point::points() {
+            for p in sextet.get(foursome).points() {
+                if let Some(label) = *self.labelling.get(p)
+                    && !used_labels.get_mut(foursome).insert(label)
                 {
                     // No duplicate labels per foursome
                     return PartialLabellingState::Overset;
@@ -117,28 +125,29 @@ impl<PrevState: AppState + Clone> State<PrevState> {
             }
         }
 
-        if used_labels.iter().any(|labels| labels.len() >= 3) {
+        if used_labels.iter().any(|(_, labels)| labels.len() >= 3) {
             // No foursomes with >= 3 labels
             return PartialLabellingState::Overset;
         }
 
+        // Which foursomes have labels
         let with_label = used_labels
             .iter()
-            .enumerate()
-            .filter_map(|(foursome_idx, labels)| {
+            .filter_map(|(foursome, labels)| {
                 if !labels.is_empty() {
-                    Some(foursome_idx)
+                    Some(foursome)
                 } else {
                     None
                 }
             })
             .collect::<Vec<_>>();
 
-        if let Some(two_labels_foursome_idx) =
-            used_labels.iter().position(|labels| labels.len() == 2)
+        if let Some(two_labels_foursome) = used_labels
+            .iter()
+            .find_map(|(h, labels)| if labels.len() == 2 { Some(h) } else { None })
         {
-            for foursome_idx in 0..6 {
-                if foursome_idx != two_labels_foursome_idx && used_labels[foursome_idx].len() >= 2 {
+            for foursome in hexacode::Point::points() {
+                if foursome != two_labels_foursome && used_labels.get(foursome).len() >= 2 {
                     // At most one foursome with >= 2 labels
                     return PartialLabellingState::Overset;
                 }
@@ -149,14 +158,15 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                 // The rest have 1 or 0 labels
                 // So, in this case, there is exactly 1 other label somewhere
 
-                let one_label_foursome_idx = used_labels
+                let one_label_foursome = used_labels
                     .iter()
-                    .position(|labels| labels.len() == 1)
+                    .find_map(|(h, labels)| if labels.len() == 1 { Some(h) } else { None })
                     .unwrap();
 
-                if are_adjacent(one_label_foursome_idx, two_labels_foursome_idx) {
-                    let one_label = used_labels[one_label_foursome_idx].iter().next().unwrap();
-                    if !used_labels[two_labels_foursome_idx]
+                if one_label_foursome.pair == two_labels_foursome.pair {
+                    let one_label = used_labels.get(one_label_foursome).iter().next().unwrap();
+                    if !used_labels
+                        .get(two_labels_foursome)
                         .iter()
                         .any(|two_label| one_label == two_label)
                     {
@@ -166,26 +176,36 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                 }
                 // Need a fourth label given in one of the other 4 foursomes
             } else if with_label.len() == 3 {
-                if let Some(one_label_adjacent_foursome_idx) = used_labels
-                    .iter()
-                    .enumerate()
-                    .position(|(foursome_idx, labels)| {
-                        labels.len() == 1 && are_adjacent(foursome_idx, two_labels_foursome_idx)
+                if let Some(one_label_adjacent_foursome) =
+                    used_labels.iter().find_map(|(foursome, labels)| {
+                        if labels.len() == 1 && foursome.pair == two_labels_foursome.pair {
+                            Some(foursome)
+                        } else {
+                            None
+                        }
                     })
                 {
-                    let one_label_nonadjacent_foursome_idx = used_labels
+                    let pair = two_labels_foursome.pair;
+                    debug_assert_eq!(pair, one_label_adjacent_foursome.pair);
+
+                    let one_label_nonadjacent_foursome = used_labels
                         .iter()
-                        .enumerate()
-                        .position(|(foursome_idx, labels)| {
-                            labels.len() == 1 && foursome_idx != one_label_adjacent_foursome_idx
+                        .find_map(|(foursome, labels)| {
+                            if labels.len() == 1 && foursome != one_label_adjacent_foursome {
+                                Some(foursome)
+                            } else {
+                                None
+                            }
                         })
                         .unwrap();
 
-                    let one_label_adjacent = used_labels[one_label_adjacent_foursome_idx]
+                    let one_label_adjacent = used_labels
+                        .get(one_label_adjacent_foursome)
                         .iter()
                         .next()
                         .unwrap();
-                    if !used_labels[two_labels_foursome_idx]
+                    if !used_labels
+                        .get(two_labels_foursome)
                         .iter()
                         .any(|two_label| one_label_adjacent == two_label)
                     {
@@ -193,13 +213,15 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                         return PartialLabellingState::Overset;
                     }
 
-                    let one_label_nonadjacent = used_labels[one_label_nonadjacent_foursome_idx]
+                    let one_label_nonadjacent = used_labels
+                        .get(one_label_nonadjacent_foursome)
                         .iter()
                         .next()
                         .unwrap();
 
                     let x = *one_label_adjacent;
-                    let y = *used_labels[two_labels_foursome_idx]
+                    let y = *used_labels
+                        .get(two_labels_foursome)
                         .iter()
                         .find(|two_label| **two_label != x)
                         .unwrap();
@@ -208,9 +230,9 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                         x,
                         y,
                         z,
-                        foursome1: one_label_adjacent_foursome_idx,
-                        foursome23: two_labels_foursome_idx,
-                        foursome4: one_label_nonadjacent_foursome_idx,
+                        pair,
+                        side: one_label_adjacent_foursome.side,
+                        third: one_label_nonadjacent_foursome,
                     };
                 } else {
                     // One of the foursomes with 1 label must be adjacent to the foursome with 2 labels
@@ -230,9 +252,9 @@ impl<PrevState: AppState + Clone> State<PrevState> {
 
             if with_label.len() == 3 {
                 // Two must make up one of the three pairs
-                if !are_adjacent(with_label[0], with_label[1])
-                    && !are_adjacent(with_label[0], with_label[2])
-                    && !are_adjacent(with_label[1], with_label[2])
+                if with_label[0].pair != with_label[1].pair
+                    && with_label[0].pair != with_label[2].pair
+                    && with_label[1].pair != with_label[2].pair
                 {
                     return PartialLabellingState::Overset;
                 }
@@ -243,15 +265,15 @@ impl<PrevState: AppState + Clone> State<PrevState> {
     }
 
     // Given the labels currently set in self.labelling, return a list of allowable labels for each point
-    fn allowed_labels(&self) -> LabelledMOGPoints<HashSet<F4Point>> {
-        let mut result = LabelledMOGPoints::<HashSet<_>>::default();
-        for i in 0..24 {
+    fn allowed_labels(&self) -> Labelled<Point, HashSet<F4Point>> {
+        let mut result = Labelled::new_constant(HashSet::new());
+        for p in Point::points() {
             for label in [F4Point::Zero, F4Point::One, F4Point::Alpha, F4Point::Beta] {
                 let mut modified_self = self.clone();
-                *modified_self.labelling.get_mut(i) = Some(label);
+                modified_self.labelling.set(p, Some(label));
                 match modified_self.partial_labelling_state() {
                     PartialLabellingState::Underset | PartialLabellingState::Perfect { .. } => {
-                        result.get_mut(i).insert(label);
+                        result.get_mut(p).insert(label);
                     }
                     PartialLabellingState::Overset => {}
                 }
@@ -261,67 +283,157 @@ impl<PrevState: AppState + Clone> State<PrevState> {
     }
 
     // Given the labels currently set in self.labelling return the completion to a labelling of the MOG if unique
-    fn complete_labelling(&self) -> Option<LabelledMOGPoints<F4Point>> {
+    fn complete_labelling(&self) -> Option<Labelled<Point, F4Point>> {
         match self.partial_labelling_state() {
             PartialLabellingState::Underset | PartialLabellingState::Overset => None,
             PartialLabellingState::Perfect {
                 x,
                 y,
                 z,
-                foursome1,
-                foursome23,
-                foursome4,
+                pair,
+                side,
+                third,
             } => {
-                let point1 = self.sextet[foursome1]
-                    .points()
-                    .find(|p| *self.labelling.get(Vector::point_to_usize(*p)) == Some(x))
-                    .unwrap();
-                let point2 = self.sextet[foursome23]
-                    .points()
-                    .find(|p| *self.labelling.get(Vector::point_to_usize(*p)) == Some(x))
-                    .unwrap();
-                let point3 = self.sextet[foursome23]
-                    .points()
-                    .find(|p| *self.labelling.get(Vector::point_to_usize(*p)) == Some(y))
-                    .unwrap();
-                let point4 = self.sextet[foursome4]
-                    .points()
-                    .find(|p| *self.labelling.get(Vector::point_to_usize(*p)) == Some(z))
+                let empty_pair = hexacode::Pair::points()
+                    .find(|p| *p != pair && *p != third.pair)
                     .unwrap();
 
-                println!();
-                println!("{:?}", point1);
-                println!("{:?}", point2);
-                println!("{:?}", point3);
-                println!("{:?}", point4);
+                let mut ordered_sextet = self.ordered_sextet();
 
-                /*
-                The algorithm
+                let h1 = hexacode::Point { side, pair };
+                let h23 = hexacode::Point {
+                    side: side.flip(),
+                    pair,
+                };
+                let h4 = third;
 
-                Step1:
-                Complete with
-                 - Point 1 is labelled 0
-                 - Point 2 is labelled 0
-                 - Point 3 is labelled 1
-                 - Point 4 is labelled z
-                using standard MOG algorithm
+                let foursome1 = self.get_foursome(h1);
+                let foursome23 = self.get_foursome(h23);
+                let foursome4 = self.get_foursome(h4);
+                let point1 = foursome1
+                    .points()
+                    .find(|p| *self.labelling.get(*p) == Some(x))
+                    .unwrap();
+                let point2 = foursome23
+                    .points()
+                    .find(|p| *self.labelling.get(*p) == Some(x))
+                    .unwrap();
+                let point3 = foursome23
+                    .points()
+                    .find(|p| *self.labelling.get(*p) == Some(y))
+                    .unwrap();
+                let point4 = foursome4
+                    .points()
+                    .find(|p| *self.labelling.get(*p) == Some(z))
+                    .unwrap();
 
-                Step2:
-                Multiply by λ such that
-                 - Point 1 is labelled 0
-                 - Point 2 is labelled 0
-                 - Point 3 is labelled x+y
-                 - Point 4 is labelled z
+                // Apply an automorphism such that foursome1 is left and foursome23 is right in their pair
+                if side == hexacode::Side::Right {
+                    for p in [pair, empty_pair] {
+                        ordered_sextet = ordered_sextet.permute(&Permutation::new_swap(
+                            &hexacode::Point {
+                                side: hexacode::Side::Left,
+                                pair: p,
+                            },
+                            &hexacode::Point {
+                                side: hexacode::Side::Right,
+                                pair: p,
+                            },
+                        ));
+                    }
+                }
 
-                Step3:
-                Add hexacodewords of the form 00λλλλ or λλ00λλ or λλλλ00 so that
-                 - Point 1 is labelled x
-                 - Point 2 is labelled x
-                 - Point 3 is labelled y
-                 - Point 4 is labelled z
-                 */
+                // Apply an automorphism such that foursome4 is the lefthand foursome in its pair
+                if h4.side == hexacode::Side::Right {
+                    for p in [h4.pair, empty_pair] {
+                        ordered_sextet = ordered_sextet.permute(&Permutation::new_swap(
+                            &hexacode::Point {
+                                side: hexacode::Side::Left,
+                                pair: p,
+                            },
+                            &hexacode::Point {
+                                side: hexacode::Side::Right,
+                                pair: p,
+                            },
+                        ));
+                    }
+                }
 
-                None
+                // Apply an automorphism such that foursome1 is the first foursome, foursome23 is the second foursome, and foursome4 is the third foursome
+                ordered_sextet = ordered_sextet.permute(
+                    &Permutation::from_fn(|h: hexacode::Point| match h.pair {
+                        hexacode::Pair::Left => hexacode::Point {
+                            side: h.side,
+                            pair: pair,
+                        },
+                        hexacode::Pair::Middle => hexacode::Point {
+                            side: h.side,
+                            pair: h4.pair,
+                        },
+                        hexacode::Pair::Right => hexacode::Point {
+                            side: h.side,
+                            pair: empty_pair,
+                        },
+                    })
+                    .inverse(),
+                );
+
+                debug_assert_eq!(
+                    ordered_sextet.foursome(hexacode::Point {
+                        side: hexacode::Side::Left,
+                        pair: hexacode::Pair::Left
+                    }),
+                    foursome1
+                );
+                debug_assert_eq!(
+                    ordered_sextet.foursome(hexacode::Point {
+                        side: hexacode::Side::Right,
+                        pair: hexacode::Pair::Left
+                    }),
+                    foursome23
+                );
+                debug_assert_eq!(
+                    ordered_sextet.foursome(hexacode::Point {
+                        side: hexacode::Side::Left,
+                        pair: hexacode::Pair::Middle
+                    }),
+                    foursome4
+                );
+
+                let mog = crate::ui::mog::mog();
+                // This labelling gives point1 and point2 a label of 0, point3 a label of 1, and point4 a label of z/(x+y)
+                let mut labelling = mog.complete_labelling(
+                    ordered_sextet,
+                    point1,
+                    point2,
+                    point3,
+                    point4,
+                    z * (x + y).inverse().unwrap(),
+                );
+                // Apply some more automorphism so that point1 and point2 are labelled x, point3 is labelled y, and point4 is labelled z
+
+                // Multiply by x+y
+                labelling = labelling.scalar_mul((x + y).inverse().unwrap()); // .inverse() here because we want to apply the scalar mul to the labels not to the points
+
+                // Add the hexacodeword xx00xx
+                labelling =
+                    labelling.add_vector(hexacode::Vector::from_fn(|h: hexacode::Point| match h {
+                        hexacode::Point {
+                            pair: hexacode::Pair::Left | hexacode::Pair::Right,
+                            ..
+                        } => x,
+                        hexacode::Point {
+                            pair: hexacode::Pair::Middle,
+                            ..
+                        } => F4Point::Zero,
+                    }));
+
+                debug_assert_eq!(*labelling.labels().get(point1), x);
+                debug_assert_eq!(*labelling.labels().get(point2), x);
+                debug_assert_eq!(*labelling.labels().get(point3), y);
+                debug_assert_eq!(*labelling.labels().get(point4), z);
+
+                Some(labelling.labels().clone())
             }
         }
     }
@@ -371,8 +483,9 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
         let completed_labels = self.complete_labelling();
 
         struct State<'a> {
-            labelling: &'a mut LabelledMOGPoints<Option<F4Point>>,
-            allowed_labels: &'a LabelledMOGPoints<HashSet<F4Point>>,
+            labelling: &'a mut Labelled<Point, Option<F4Point>>,
+            allowed_labels: &'a Labelled<Point, HashSet<F4Point>>,
+            completed_labels: &'a Option<Labelled<Point, F4Point>>,
         }
 
         let mut mog_visuals = super::grid::GridVisuals::<State>::default();
@@ -380,7 +493,7 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
         // The 6x4 MOG grid
         for (foursome_idx, foursome) in self.sextet.iter().enumerate() {
             for p in foursome.points() {
-                let i = Vector::point_to_usize(p);
+                let i = p.point_to_usize();
                 mog_visuals.draw(
                     (i as isize % 6, i as isize / 6),
                     Box::new(move |ui, response, painter, rect, state| {
@@ -396,8 +509,8 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
 
                         // Draw a border when dragging to indicate a label can be set here
                         if response.is_pointer_button_down_on()
-                            && (!state.allowed_labels.get(i).is_empty()
-                                || state.labelling.get(i).is_some())
+                            && (!state.allowed_labels.get(p).is_empty()
+                                || state.labelling.get(p).is_some())
                         {
                             painter.rect_stroke(
                                 rect,
@@ -418,23 +531,31 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
                                 painter,
                                 response,
                                 rect,
-                                state.allowed_labels.get(i).clone(),
-                                state.labelling.get(i).is_some(),
+                                state.allowed_labels.get(p).clone(),
+                                state.labelling.get(p).is_some(),
                             );
                             if response.drag_stopped() || response.clicked() {
                                 match result {
                                     crate::ui::mog::F4SelectionResult::None => {}
                                     crate::ui::mog::F4SelectionResult::Point(label) => {
-                                        *state.labelling.get_mut(i) = Some(label);
+                                        state.labelling.set(p, Some(label));
                                     }
                                     crate::ui::mog::F4SelectionResult::Cross => {
-                                        *state.labelling.get_mut(i) = None;
+                                        state.labelling.set(p, None);
                                     }
                                 }
                             }
-                        } else if let Some(label) = *state.labelling.get(i) {
+                        } else if let Some(label) = *state.labelling.get(p) {
                             // Draw labels
                             draw_f4(ui, painter, rect, ui.visuals().strong_text_color(), label);
+                        } else if let Some(completed_labels) = state.completed_labels {
+                            draw_f4(
+                                ui,
+                                painter,
+                                rect,
+                                ui.visuals().weak_text_color(),
+                                *completed_labels.get(p),
+                            );
                         }
                     }),
                 );
@@ -447,6 +568,7 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
                 State {
                     labelling: &mut self.labelling,
                     allowed_labels: &allowed_labels,
+                    completed_labels: &completed_labels,
                 },
             );
         });

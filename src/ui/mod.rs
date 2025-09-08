@@ -15,52 +15,6 @@ mod mog {
         MOG.get_or_init(BinaryGolayCode::default)
     }
 
-    #[derive(Default, Debug, Clone)]
-    pub struct LabelledMOGPoints<T> {
-        entries: [T; 24],
-    }
-
-    impl LabelledMOGPoints<bool> {
-        pub fn count(&self) -> usize {
-            let mut t = 0;
-            for i in 0..24 {
-                if self.entries[i] {
-                    t += 1;
-                }
-            }
-            t
-        }
-
-        pub fn set_all(&mut self, value: bool) {
-            for i in 0..24 {
-                self.entries[i] = value;
-            }
-        }
-
-        pub fn to_vector(&self) -> Vector {
-            Vector::from_fn(|p| self.entries[Vector::point_to_usize(p)])
-        }
-    }
-
-    impl<T> LabelledMOGPoints<T> {
-        pub fn filled(t: &T) -> Self
-        where
-            T: Clone,
-        {
-            Self {
-                entries: std::array::from_fn(|_| t.clone()),
-            }
-        }
-
-        pub fn get(&self, i: usize) -> &T {
-            &self.entries[i]
-        }
-
-        pub fn get_mut(&mut self, i: usize) -> &mut T {
-            &mut self.entries[i]
-        }
-    }
-
     // Draw an F4 element
     pub fn draw_f4(
         ui: &mut eframe::egui::Ui,
