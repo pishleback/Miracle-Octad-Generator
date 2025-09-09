@@ -21,12 +21,12 @@ pub fn arrowhead_cap(size: f64) -> LineCap<[f64; 2], f64> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Polygon {
+pub struct Shape {
     // list of (anti-clockwise outer loop in the first entry followed by a list of clockwise holes) for a disjoint union of polygons
     shapes: Vec<Vec<Vec<[f64; 2]>>>,
 }
 
-impl Polygon {
+impl Shape {
     pub fn empty() -> Self {
         Self { shapes: vec![] }
     }
@@ -105,11 +105,11 @@ impl Polygon {
     }
 }
 
-impl BitOr<&Polygon> for &Polygon {
-    type Output = Polygon;
+impl BitOr<&Shape> for &Shape {
+    type Output = Shape;
 
-    fn bitor(self, other: &Polygon) -> Self::Output {
-        Polygon {
+    fn bitor(self, other: &Shape) -> Self::Output {
+        Shape {
             shapes: self
                 .shapes
                 .overlay(&other.shapes, OverlayRule::Union, FillRule::EvenOdd),
@@ -117,11 +117,11 @@ impl BitOr<&Polygon> for &Polygon {
     }
 }
 
-impl BitAnd<&Polygon> for &Polygon {
-    type Output = Polygon;
+impl BitAnd<&Shape> for &Shape {
+    type Output = Shape;
 
-    fn bitand(self, other: &Polygon) -> Self::Output {
-        Polygon {
+    fn bitand(self, other: &Shape) -> Self::Output {
+        Shape {
             shapes: self
                 .shapes
                 .overlay(&other.shapes, OverlayRule::Intersect, FillRule::EvenOdd),
@@ -129,11 +129,11 @@ impl BitAnd<&Polygon> for &Polygon {
     }
 }
 
-impl BitXor<&Polygon> for &Polygon {
-    type Output = Polygon;
+impl BitXor<&Shape> for &Shape {
+    type Output = Shape;
 
-    fn bitxor(self, other: &Polygon) -> Self::Output {
-        Polygon {
+    fn bitxor(self, other: &Shape) -> Self::Output {
+        Shape {
             shapes: self
                 .shapes
                 .overlay(&other.shapes, OverlayRule::Xor, FillRule::EvenOdd),
@@ -141,7 +141,7 @@ impl BitXor<&Polygon> for &Polygon {
     }
 }
 
-impl Polygon {
+impl Shape {
     pub fn to_egui_mesh(&self, colour: Color32) -> Mesh {
         let triangulation = self.shapes.triangulate().to_triangulation();
         Mesh {

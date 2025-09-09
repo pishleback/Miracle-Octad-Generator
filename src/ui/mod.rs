@@ -1,3 +1,4 @@
+pub mod mog_permutation_shapes;
 pub mod point_toggle;
 pub mod sextet_labelling;
 pub mod shape;
@@ -155,7 +156,7 @@ mod mog {
 }
 
 mod grid {
-    use crate::ui::shape::Polygon;
+    use crate::ui::shape::Shape;
     use eframe::egui::{Color32, Painter, Pos2, Rect, Response, Sense, Vec2};
     use std::collections::HashMap;
 
@@ -174,6 +175,7 @@ mod grid {
         elements: HashMap<GridCell, Box<GridCellShower<State>>>,
     }
 
+    #[derive(Debug, Clone, PartialEq)]
     pub struct GridCoordinates {
         rect: Rect,
         unit: f32,

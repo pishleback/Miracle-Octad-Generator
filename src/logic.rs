@@ -24,6 +24,10 @@ pub mod permutation {
             Self { perm, left, right }
         }
 
+        pub fn map_injective_unchecked<S : PartialEq + Eq + Hash + Clone>(self, f: impl Fn(T) -> S) -> Permutation<S> {
+            Permutation::from_perm_unchecked(self.perm.into_iter().map(|(a, b)| (f(a), f(b))).collect())
+        }
+
         pub fn from_fn(f: impl Fn(T) -> T) -> Self
         where
             T: Enumerated,
@@ -109,6 +113,14 @@ pub mod permutation {
             )
         }
     }
+
+    impl<T: PartialEq + Eq + Hash> PartialEq for Permutation<T> {
+        fn eq(&self, other: &Self) -> bool {
+            self.right == other.right
+        }
+    }
+
+    impl<T: PartialEq + Eq + Hash> Eq for Permutation<T> {}
 }
 
 pub mod traits {
