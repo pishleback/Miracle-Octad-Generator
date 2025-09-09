@@ -462,7 +462,7 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
             .show(ctx, |ui| {
                 // Reset
                 if ui.button("Back").clicked() {
-                    return Some(self.prev_state.clone());
+                    return Some(Box::new(self.prev_state.clone()));
                 }
 
                 // Reorder the sextets
@@ -488,7 +488,7 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
             })
             .inner
         {
-            return Some(Box::new(new_state));
+            return Some(new_state);
         }
 
         let allowed_labels = self.allowed_labels();

@@ -60,7 +60,8 @@ struct MyApp {
 impl Default for MyApp {
     fn default() -> Self {
         Self {
-            state: Box::new(ui::point_toggle::State::default()),
+            // state: Box::new(ui::point_toggle::State::default()),
+            state: Box::new(ui::permutation_selection::State::default()),
         }
     }
 }

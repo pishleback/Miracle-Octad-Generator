@@ -123,10 +123,10 @@ The sextet whose foursomes are the differences between these points and the near
                         }
 
                         if complete_sextet_button.clicked() {
-                            return Some(super::sextet_labelling::State::from_foursome(
+                            return Some(Box::new(super::sextet_labelling::State::from_foursome(
                                 self.clone(),
                                 &(&self.selected_points + &codewords[0]),
-                            ));
+                            )));
                         }
                     }
                 }
@@ -157,7 +157,7 @@ The sextet whose foursomes are the differences between these points and the near
             })
             .inner
         {
-            return Some(Box::new(new_state));
+            return Some(new_state);
         }
 
         struct State<'a> {

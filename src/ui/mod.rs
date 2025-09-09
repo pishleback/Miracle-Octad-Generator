@@ -1,4 +1,5 @@
 pub mod mog_permutation_shapes;
+pub mod permutation_selection;
 pub mod point_toggle;
 pub mod sextet_labelling;
 pub mod shape;
@@ -156,7 +157,7 @@ mod mog {
 }
 
 mod grid {
-    use eframe::egui::{ Painter, Pos2, Rect, Response, Sense, Vec2};
+    use eframe::egui::{Painter, Pos2, Rect, Response, Sense, Vec2};
     use std::collections::HashMap;
 
     pub type GridCell = (isize, isize);

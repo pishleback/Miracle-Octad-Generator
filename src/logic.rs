@@ -1,6 +1,9 @@
 pub mod permutation {
-    use eframe::egui::ahash::HashMap;
-    use std::{collections::HashSet, hash::Hash, ops::Mul};
+    use std::{
+        collections::{HashMap, HashSet},
+        hash::Hash,
+        ops::Mul,
+    };
 
     use crate::logic::traits::Enumerated;
 
@@ -12,6 +15,14 @@ pub mod permutation {
     }
 
     impl<T: PartialEq + Eq + Hash + Clone> Permutation<T> {
+        pub fn identity() -> Self {
+            Self {
+                perm: vec![],
+                right: HashMap::new(),
+                left: HashMap::new(),
+            }
+        }
+
         fn from_perm_unchecked(perm: Vec<(T, T)>) -> Self {
             let right = perm.iter().cloned().collect::<HashMap<T, T>>();
             let left = perm
@@ -24,8 +35,13 @@ pub mod permutation {
             Self { perm, left, right }
         }
 
-        pub fn map_injective_unchecked<S : PartialEq + Eq + Hash + Clone>(self, f: impl Fn(T) -> S) -> Permutation<S> {
-            Permutation::from_perm_unchecked(self.perm.into_iter().map(|(a, b)| (f(a), f(b))).collect())
+        pub fn map_injective_unchecked<S: PartialEq + Eq + Hash + Clone>(
+            self,
+            f: impl Fn(T) -> S,
+        ) -> Permutation<S> {
+            Permutation::from_perm_unchecked(
+                self.perm.into_iter().map(|(a, b)| (f(a), f(b))).collect(),
+            )
         }
 
         pub fn from_fn(f: impl Fn(T) -> T) -> Self
@@ -41,7 +57,11 @@ pub mod permutation {
         }
 
         pub fn new_swap(t1: &T, t2: &T) -> Self {
-            Self::from_perm_unchecked(vec![(t1.clone(), t2.clone()), (t2.clone(), t1.clone())])
+            if t1 == t2 {
+                Self::identity()
+            } else {
+                Self::from_perm_unchecked(vec![(t1.clone(), t2.clone()), (t2.clone(), t1.clone())])
+            }
         }
 
         pub fn new_cycle(ts: Vec<&T>) -> Self {
