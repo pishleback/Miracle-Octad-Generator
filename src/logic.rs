@@ -46,7 +46,7 @@ pub mod permutation {
             assert_eq!(ts.iter().collect::<HashSet<_>>().len(), n);
             Self::from_perm_unchecked(
                 (0..n)
-                    .map(|i| (ts[i].clone(), ts[(i + n) % n].clone()))
+                    .map(|i| (ts[i].clone(), ts[(i + 1) % n].clone()))
                     .collect(),
             )
         }
@@ -65,6 +65,29 @@ pub mod permutation {
 
         pub fn apply_inverse<'a>(&'a self, t: &'a T) -> &'a T {
             self.left.get(t).unwrap_or(t)
+        }
+
+        pub fn disjoint_cycles(&self) -> Vec<Vec<&T>> {
+            let mut cycles = vec![];
+            let mut used = HashSet::new();
+            for t in self.right.keys() {
+                if !used.contains(t) {
+                    let mut cycle = vec![];
+                    let mut s = t;
+                    loop {
+                        cycle.push(s);
+                        used.insert(s);
+                        s = self.right.get(s).unwrap();
+                        if s == t {
+                            break;
+                        }
+                    }
+                    if cycle.len() >= 2 {
+                        cycles.push(cycle);
+                    }
+                }
+            }
+            cycles
         }
     }
 

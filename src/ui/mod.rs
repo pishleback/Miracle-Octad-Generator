@@ -1,5 +1,6 @@
 pub mod point_toggle;
 pub mod sextet_labelling;
+pub mod shape;
 
 mod mog {
     use crate::logic::finite_field_4::Point as F4Point;
@@ -154,9 +155,9 @@ mod mog {
 }
 
 mod grid {
-    use std::{cell, collections::HashMap};
-
-    use eframe::egui::{Color32, Stroke};
+    use crate::ui::shape::Polygon;
+    use eframe::egui::{Color32, Painter, Pos2, Rect, Response, Sense, Vec2};
+    use std::collections::HashMap;
 
     pub type GridCell = (isize, isize);
 
@@ -171,7 +172,25 @@ mod grid {
     pub struct GridVisuals<State> {
         pad: f32, // The gap between squares
         elements: HashMap<GridCell, Box<GridCellShower<State>>>,
-        lines: Vec<(GridCell, GridCell)>,
+    }
+
+    pub struct GridCoordinates {
+        rect: Rect,
+        unit: f32,
+        min_cell: GridCell,
+    }
+
+    impl GridCoordinates {
+        pub fn cell_to_pos(&self, cell: GridCell) -> Pos2 {
+            Pos2 {
+                x: self.rect.left() + ((cell.0 - self.min_cell.0) as f32 + 0.5) * self.unit,
+                y: self.rect.top() + ((cell.1 - self.min_cell.1) as f32 + 0.5) * self.unit,
+            }
+        }
+
+        pub fn cell_scalar_to_pos_scalar(&self, lambda: f32) -> f32 {
+            lambda * self.unit
+        }
     }
 
     impl<State> Default for GridVisuals<State> {
@@ -179,7 +198,6 @@ mod grid {
             Self {
                 pad: 10.0,
                 elements: HashMap::new(),
-                lines: Vec::new(),
             }
         }
     }
@@ -189,21 +207,15 @@ mod grid {
             self.elements.insert(cell, shower);
         }
 
-        pub fn draw_line(&mut self, start: GridCell, end: GridCell) {
-            self.lines.push((start, end));
-        }
-
-        pub fn show(self, ui: &mut eframe::egui::Ui, mut state: State) {
-            use eframe::egui::{Pos2, Rect, Sense, Vec2};
-
-            if self.elements.is_empty() {
-                return;
-            }
-
-            let min_i = self.elements.keys().map(|(i, _)| *i).min().unwrap();
-            let max_i = self.elements.keys().map(|(i, _)| *i).max().unwrap();
-            let min_j = self.elements.keys().map(|(_, j)| *j).min().unwrap();
-            let max_j = self.elements.keys().map(|(_, j)| *j).max().unwrap();
+        pub fn show(
+            self,
+            ui: &mut eframe::egui::Ui,
+            mut state: State,
+        ) -> (Response, Painter, State, GridCoordinates) {
+            let min_i = self.elements.keys().map(|(i, _)| *i).min().unwrap_or(0);
+            let max_i = self.elements.keys().map(|(i, _)| *i).max().unwrap_or(0);
+            let min_j = self.elements.keys().map(|(_, j)| *j).min().unwrap_or(0);
+            let max_j = self.elements.keys().map(|(_, j)| *j).max().unwrap_or(0);
             let size_i = max_i - min_i + 1;
             let size_j = max_j - min_j + 1;
 
@@ -223,15 +235,14 @@ mod grid {
             );
             let unit = response.rect.width() / (size_i as f32);
 
-            let cell_to_pos = |(i, j): GridCell| -> Pos2 {
-                Pos2 {
-                    x: response.rect.left() + ((i - min_i) as f32 + 0.5) * unit,
-                    y: response.rect.top() + ((j - min_j) as f32 + 0.5) * unit,
-                }
+            let coordinates = GridCoordinates {
+                rect: response.rect,
+                unit,
+                min_cell: (min_i, min_j),
             };
 
             for (cell, shower) in self.elements {
-                let pos = cell_to_pos(cell);
+                let pos = coordinates.cell_to_pos(cell);
                 let rect = Rect::from_center_size(
                     pos,
                     Vec2 {
@@ -242,26 +253,7 @@ mod grid {
                 shower(ui, &response, &painter, rect, &mut state);
             }
 
-            for (start, end) in self.lines {
-                let start_pos = cell_to_pos(start);
-                let end_pos = cell_to_pos(end);
-                let vec = end_pos - start_pos;
-                let perp = Vec2 {
-                    x: vec.y,
-                    y: -vec.x,
-                };
-                let start_ctrl = start_pos + 0.3 * (end_pos - start_pos) + 0.1 * perp;
-                let end_ctrl = start_pos + 0.7 * (end_pos - start_pos) + 0.1 * perp;
-
-                let cubic = eframe::egui::epaint::CubicBezierShape::from_points_stroke(
-                    [start_pos, start_ctrl, end_ctrl, end_pos],
-                    false,
-                    Color32::TRANSPARENT,
-                    Stroke::new(10.0, Color32::BLACK * Color32::from_white_alpha(64)),
-                );
-
-                painter.add(eframe::egui::Shape::CubicBezier(cubic));
-            }
+            (response, painter, state, coordinates)
         }
     }
 }
