@@ -83,7 +83,7 @@ impl Shape {
         end_cap: LineCap<[f64; 2], f64>,
     ) -> Self {
         assert!(points.len() >= 2);
-        fn compute_bezier(points: &Vec<Pos2>, t: f32) -> Pos2 {
+        fn compute_bezier(points: &[Pos2], t: f32) -> Pos2 {
             debug_assert!(!points.is_empty());
             if points.len() == 1 {
                 return points[0];

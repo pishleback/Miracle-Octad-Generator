@@ -18,7 +18,7 @@ mod mog {
 
     // Draw an F4 element
     pub fn draw_f4(
-        ui: &mut eframe::egui::Ui,
+        _ui: &mut eframe::egui::Ui,
         painter: &eframe::egui::Painter,
         rect: eframe::egui::Rect,
         colour: Color32,
@@ -156,8 +156,7 @@ mod mog {
 }
 
 mod grid {
-    use crate::ui::shape::Shape;
-    use eframe::egui::{Color32, Painter, Pos2, Rect, Response, Sense, Vec2};
+    use eframe::egui::{ Painter, Pos2, Rect, Response, Sense, Vec2};
     use std::collections::HashMap;
 
     pub type GridCell = (isize, isize);

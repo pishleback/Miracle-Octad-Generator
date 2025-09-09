@@ -582,7 +582,7 @@ pub mod miracle_octad_generator {
         }
 
         pub fn foursome(&self, foursome: hexacode::Point) -> &Vector {
-            &self.foursomes.get(foursome)
+            self.foursomes.get(foursome)
         }
 
         pub fn permute(self, perm: &Permutation<hexacode::Point>) -> Self {
@@ -777,7 +777,7 @@ pub mod miracle_octad_generator {
             }
             let mut sextet = HashSet::new();
             for codeword in &self.codewords {
-                let offset = codeword + &vector;
+                let offset = codeword + vector;
                 if offset.weight() == 4 {
                     sextet.insert(offset);
                 }
@@ -851,10 +851,10 @@ pub mod miracle_octad_generator {
                 ))
                 .unwrap();
             let (w2, w3, w4, w5) = (
-                take_unique_pt(&octad & &t2),
-                take_unique_pt(&octad & &t3),
-                take_unique_pt(&octad & &t4),
-                take_unique_pt(&octad & &t5),
+                take_unique_pt(&octad & t2),
+                take_unique_pt(&octad & t3),
+                take_unique_pt(&octad & t4),
+                take_unique_pt(&octad & t5),
             );
             debug_assert_eq!(w2, w);
             labels.set(w3, beta);

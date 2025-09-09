@@ -3,16 +3,13 @@ use crate::logic::traits::{Enumerated, Labelled};
 use crate::logic::{hexacode, miracle_octad_generator::*};
 use crate::ui::grid::GridCell;
 use crate::ui::mog_permutation_shapes::MogPermutationShapeCache;
-use crate::ui::shape::{Shape, arrowhead_cap};
 use crate::{
     AppState,
     logic::finite_field_4::Point as F4Point,
     ui::mog::{draw_f4, f4_selection, sextet_idx_to_colour},
 };
-use eframe::egui::{Button, CentralPanel, Color32, SidePanel, Vec2};
-use i_overlay::mesh::style::LineCap;
+use eframe::egui::{Button, CentralPanel, Color32, SidePanel};
 use std::collections::HashSet;
-use std::hint::black_box;
 
 #[derive(Debug)]
 enum PartialLabellingState {
@@ -591,7 +588,7 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
         }
 
         CentralPanel::default().show(ctx, |ui| {
-            let (response, painter, state, coordinates) = grid.show(
+            let (_response, painter, state, coordinates) = grid.show(
                 ui,
                 State {
                     labelling: &mut self.labelling,
@@ -606,7 +603,7 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
                     col: *completed_labels.foursomes().get(p),
                     row: *completed_labels.labels().get(p),
                 })
-                .map_injective_unchecked(&point_to_cell);
+                .map_injective_unchecked(point_to_cell);
 
                 self.permutation_shapes
                     .set_permutation(permutation, coordinates);

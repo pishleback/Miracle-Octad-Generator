@@ -1,4 +1,3 @@
-use crate::logic;
 use crate::logic::finite_field_4::Point as F4Point;
 use crate::logic::miracle_octad_generator::*;
 use crate::logic::traits::{Enumerated, Labelled};
@@ -7,11 +6,9 @@ use crate::{
     AppState,
     ui::mog::{draw_f4, row_to_f4},
 };
-use eframe::egui::Button;
 use eframe::{
     Frame,
-    egui::{CentralPanel, Color32, Context, Painter, Rect, SidePanel, Ui},
-    egui_glow::painter,
+    egui::{CentralPanel, Color32, Context,   SidePanel},
 };
 
 #[derive(Clone)]
@@ -28,7 +25,7 @@ impl Default for State {
 }
 
 impl AppState for State {
-    fn update(&mut self, ctx: &Context, frame: &mut Frame) -> Option<Box<dyn AppState>> {
+    fn update(&mut self, ctx: &Context, _frame: &mut Frame) -> Option<Box<dyn AppState>> {
         let mut preview_select_points = Labelled::<Point, Option<bool>>::new_constant(None);
         let mut coloured_highlight_points = Labelled::<Point, Option<Color32>>::new_constant(None);
 
@@ -175,7 +172,7 @@ The sextet whose foursomes are the differences between these points and the near
         for r in 0usize..4 {
             grid.draw_cell(
                 (-1, r as isize),
-                Box::new(move |ui, response, painter, rect, state| {
+                Box::new(move |ui, _response, painter, rect, _state| {
                     draw_f4(ui, painter, rect, ui.visuals().text_color(), row_to_f4(r))
                 }),
             )
@@ -196,7 +193,7 @@ The sextet whose foursomes are the differences between these points and the near
             }
             grid.draw_cell(
                 (c as isize, 4),
-                Box::new(move |ui, response, painter, rect, state| {
+                Box::new(move |ui, _response, painter, rect, _state| {
                     draw_f4(ui, painter, rect, ui.visuals().text_color(), t)
                 }),
             )
