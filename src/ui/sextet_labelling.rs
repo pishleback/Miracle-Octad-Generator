@@ -631,7 +631,7 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
                                 | &Polygon::bezier(
                                     vec![start_pos, start_pos + 0.5 * vec + 0.17 * perp, end_pos],
                                     width,
-                                    20,
+                                    12,
                                     start_cap,
                                     end_cap,
                                 );
@@ -681,14 +681,14 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
                             | &Polygon::regular_polygon(
                                 coordinates.cell_to_pos(start),
                                 line_width,
-                                36,
+                                12,
                                 0.0,
                             );
                         shape = &shape
                             | &Polygon::regular_polygon(
                                 coordinates.cell_to_pos(end),
                                 line_width,
-                                36,
+                                12,
                                 0.0,
                             );
                     } else {
@@ -729,7 +729,7 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
                                     } else {
                                         0.8 * line_width
                                     },
-                                    36,
+                                    12,
                                     0.0,
                                 );
                         }
