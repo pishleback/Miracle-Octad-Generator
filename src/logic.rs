@@ -1,6 +1,11 @@
+#![allow(dead_code)]
+
 pub mod permutation {
-    use eframe::egui::ahash::HashMap;
-    use std::{collections::HashSet, hash::Hash, ops::Mul};
+    use std::{
+        collections::{HashMap, HashSet},
+        hash::Hash,
+        ops::Mul,
+    };
 
     use crate::logic::traits::Enumerated;
 
@@ -12,6 +17,14 @@ pub mod permutation {
     }
 
     impl<T: PartialEq + Eq + Hash + Clone> Permutation<T> {
+        pub fn identity() -> Self {
+            Self {
+                perm: vec![],
+                right: HashMap::new(),
+                left: HashMap::new(),
+            }
+        }
+
         fn from_perm_unchecked(perm: Vec<(T, T)>) -> Self {
             let right = perm.iter().cloned().collect::<HashMap<T, T>>();
             let left = perm
@@ -24,8 +37,13 @@ pub mod permutation {
             Self { perm, left, right }
         }
 
-        pub fn map_injective_unchecked<S : PartialEq + Eq + Hash + Clone>(self, f: impl Fn(T) -> S) -> Permutation<S> {
-            Permutation::from_perm_unchecked(self.perm.into_iter().map(|(a, b)| (f(a), f(b))).collect())
+        pub fn map_injective_unchecked<S: PartialEq + Eq + Hash + Clone>(
+            self,
+            f: impl Fn(T) -> S,
+        ) -> Permutation<S> {
+            Permutation::from_perm_unchecked(
+                self.perm.into_iter().map(|(a, b)| (f(a), f(b))).collect(),
+            )
         }
 
         pub fn from_fn(f: impl Fn(T) -> T) -> Self
@@ -41,7 +59,11 @@ pub mod permutation {
         }
 
         pub fn new_swap(t1: &T, t2: &T) -> Self {
-            Self::from_perm_unchecked(vec![(t1.clone(), t2.clone()), (t2.clone(), t1.clone())])
+            if t1 == t2 {
+                Self::identity()
+            } else {
+                Self::from_perm_unchecked(vec![(t1.clone(), t2.clone()), (t2.clone(), t1.clone())])
+            }
         }
 
         pub fn new_cycle(ts: Vec<&T>) -> Self {
@@ -722,6 +744,7 @@ pub mod miracle_octad_generator {
             let mut codewords = HashSet::new();
             for b in 0usize..(1 << basis.len()) {
                 let mut codeword = Vector::zero();
+                #[allow(clippy::needless_range_loop)]
                 for i in 0..basis.len() {
                     if b & (1usize << i) != 0 {
                         codeword = &codeword + &basis[i];
@@ -764,7 +787,7 @@ pub mod miracle_octad_generator {
                 return Err(());
             }
             for codeword in &self.codewords {
-                if codeword.weight() == 8 && codeword.contains(&vector) {
+                if codeword.weight() == 8 && codeword.contains(vector) {
                     return Ok(codeword.clone());
                 }
             }
@@ -821,7 +844,7 @@ pub mod miracle_octad_generator {
             assert!(t1.contains_point(z));
             assert!(t2.contains_point(w));
             assert_ne!(y, z);
-            let mut labels = Labelled::new_constant(&F4Point::Zero);
+            let mut labels = Labelled::new_constant(F4Point::Zero);
             debug_assert_eq!(*labels.get(x), F4Point::Zero);
             debug_assert_eq!(*labels.get(y), F4Point::Zero);
             labels.set(z, F4Point::One);
@@ -980,6 +1003,14 @@ pub mod miracle_octad_generator {
             NearestCodewordsResult::Six {
                 codewords: std::array::from_fn(|i| dist_4_codewords[i].clone()),
             }
+        }
+    }
+
+    impl BinaryGolayCode {
+        pub fn is_automorphism(&self, permutation: &Permutation<Point>) -> bool {
+            self.basis
+                .iter()
+                .all(|b| self.codewords.contains(&b.permute(permutation)))
         }
     }
 }

@@ -2,6 +2,7 @@ use crate::logic::permutation::Permutation;
 use crate::logic::traits::{Enumerated, Labelled};
 use crate::logic::{hexacode, miracle_octad_generator::*};
 use crate::ui::grid::GridCell;
+use crate::ui::mog::mog;
 use crate::ui::mog_permutation_shapes::MogPermutationShapeCache;
 use crate::{
     AppState,
@@ -32,13 +33,77 @@ enum PartialLabellingState {
     Overset,
 }
 
+mod foursome_index {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    // We cant sort a Vec<usize> for sorting foursomes when there are multiple foursome orderings on the page, because egui_dnd needs every item to be unique, even over different lists
+    // So, wrap the foursome idx in this struct so it can be make unique
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct FoursomeIndex {
+        index: usize,
+        unique_id: usize,
+    }
+
+    impl FoursomeIndex {
+        pub fn new(index: usize) -> Self {
+            static COUNTER: AtomicUsize = AtomicUsize::new(0);
+            let unique_id = COUNTER.fetch_add(1, Ordering::Relaxed);
+            Self { index, unique_id }
+        }
+
+        pub fn index(&self) -> usize {
+            self.index
+        }
+    }
+}
+use foursome_index::*;
+
+#[derive(Clone, PartialEq, Eq)]
+struct SextetStabilizer {
+    foursome_permutation: Vec<FoursomeIndex>,
+    inner_permutations: Vec<Permutation<F4Point>>,
+}
+
+impl Default for SextetStabilizer {
+    fn default() -> Self {
+        Self {
+            foursome_permutation: (0..6).map(FoursomeIndex::new).collect(),
+            inner_permutations: (0..6).map(|_| Permutation::identity()).collect(),
+        }
+    }
+}
+
+impl SextetStabilizer {
+    pub fn standard_ordered_sextet_permutation(&self) -> Permutation<Point> {
+        Permutation::from_fn(|point: Point| {
+            let col_idx = point.col.point_to_usize();
+            Point {
+                col: hexacode::Point::usize_to_point(self.foursome_permutation[col_idx].index())
+                    .unwrap(),
+                row: *self.inner_permutations[col_idx].apply(&point.row),
+            }
+        })
+    }
+}
+
+#[derive(Default, Clone, PartialEq, Eq)]
+enum PermutationType {
+    #[default]
+    None,
+    StandardToLabellingAut,
+    LabellingToStandardAut,
+    SextetStabilizer,
+}
+
 #[derive(Clone)]
 pub struct State<PrevState: AppState + Clone + 'static> {
     prev_state: PrevState,
     sextet: Vec<Vector>,
-    ordering: Vec<usize>, // A permutation of 0..6
+    ordering: Vec<FoursomeIndex>, // A permutation of 0..6
     labelling: Labelled<Point, Option<F4Point>>,
     permutation_shapes: MogPermutationShapeCache,
+    selected_permutation_type: PermutationType,
+    sextet_stabilizer_permutation: SextetStabilizer,
 }
 
 impl<PrevState: AppState + Clone> State<PrevState> {
@@ -54,18 +119,16 @@ impl<PrevState: AppState + Clone> State<PrevState> {
         Self {
             prev_state,
             sextet,
-            ordering: (0..6).collect(),
+            ordering: (0..6).map(FoursomeIndex::new).collect(),
             labelling: Labelled::new_constant(None),
             permutation_shapes: MogPermutationShapeCache::default(),
+            selected_permutation_type: PermutationType::default(),
+            sextet_stabilizer_permutation: SextetStabilizer::default(),
         }
     }
 
     fn get_foursome(&self, foursome: hexacode::Point) -> &Vector {
-        &self.sextet[self
-            .ordering
-            .iter()
-            .position(|i| *i == foursome.point_to_usize())
-            .unwrap()]
+        &self.sextet[self.ordering[foursome.point_to_usize()].index()]
     }
 
     pub fn ordered_sextet(&self) -> OrderedSextet {
@@ -97,21 +160,6 @@ impl<PrevState: AppState + Clone> State<PrevState> {
     which, by standard theory, extends to a unique labelling.
      */
     fn partial_labelling_state(&self) -> PartialLabellingState {
-        // let are_adjacent = |foursome_idx_1: usize, foursome_idx_2: usize| {
-        //     debug_assert_ne!(foursome_idx_1, foursome_idx_2);
-        //     self.ordering
-        //         .iter()
-        //         .position(|i| *i == foursome_idx_1)
-        //         .unwrap()
-        //         / 2
-        //         == self
-        //             .ordering
-        //             .iter()
-        //             .position(|i| *i == foursome_idx_2)
-        //             .unwrap()
-        //             / 2
-        // };
-
         let sextet: Labelled<hexacode::Point, Vector> =
             Labelled::from_fn(|h: hexacode::Point| self.get_foursome(h).clone());
 
@@ -457,49 +505,249 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
         ctx: &eframe::egui::Context,
         _frame: &mut eframe::Frame,
     ) -> Option<Box<dyn AppState>> {
+        let allowed_labels = self.allowed_labels();
+        let completed_labels = self.complete_labelling();
+        let mut hovered_point = None;
+
+        let permutation = if let Some(completed_labels) = &completed_labels {
+            let standard_labelling_to_completed_labelling = Permutation::from_fn(|p| Point {
+                col: *completed_labels.foursomes().get(p),
+                row: *completed_labels.labels().get(p),
+            });
+
+            match self.selected_permutation_type {
+                PermutationType::None => None,
+                PermutationType::StandardToLabellingAut => {
+                    Some(standard_labelling_to_completed_labelling)
+                }
+                PermutationType::LabellingToStandardAut => {
+                    Some(standard_labelling_to_completed_labelling.inverse())
+                }
+                PermutationType::SextetStabilizer => Some(
+                    &(&standard_labelling_to_completed_labelling
+                        * &self
+                            .sextet_stabilizer_permutation
+                            .standard_ordered_sextet_permutation())
+                        * &standard_labelling_to_completed_labelling.inverse(),
+                ),
+            }
+        } else {
+            None
+        };
+
         if let Some(new_state) = SidePanel::left("left_panel")
-            .exact_width(200.0)
+            .exact_width(300.0)
             .show(ctx, |ui| {
-                // Reset
+                // Back
                 if ui.button("Back").clicked() {
-                    return Some(self.prev_state.clone());
+                    return Some(Box::<dyn AppState>::from(Box::new(self.prev_state.clone())));
                 }
 
+                ui.heading("Labelling Editor");
+
                 // Reorder the sextets
-                ui.heading("Reorder Foursomes");
+                ui.label("Reorder Foursomes");
                 egui_dnd::dnd(ui, "foursome_ordering").show_vec(
                     &mut self.ordering,
-                    |ui, item, handle, state| {
-                        ui.horizontal(|ui| {
-                            handle.ui(ui, |ui| {
-                                ui.add_enabled(
-                                    true,
-                                    Button::new(format!("Foursome {:?}", state.index + 1)).fill(
-                                        sextet_idx_to_colour(*item).linear_multiply(0.3)
-                                            + ui.visuals().panel_fill.linear_multiply(0.7),
-                                    ),
-                                );
-                            });
+                    |ui, item: &mut FoursomeIndex, handle, state| {
+                        handle.ui(ui, |ui| {
+                            ui.add_enabled(
+                                true,
+                                Button::new(format!("Foursome {}", state.index + 1)).fill(
+                                    sextet_idx_to_colour(item.index()).linear_multiply(0.3)
+                                        + ui.visuals().panel_fill.linear_multiply(0.7),
+                                ),
+                            );
                         });
+                        if state.index == 1 || state.index == 3 {
+                            ui.add_space(4.0);
+                        }
                     },
                 );
+
+                if completed_labels.is_none() {
+                    ui.label(
+                        "Select labels until there is a unique completion to a full labelling.",
+                    );
+                }
+
+                // Permutations
+                if completed_labels.is_some() {
+                    ui.heading("Permutation");
+                    ui.label(
+                        "\
+Construct permutations induced by this labelling",
+                    );
+                    ui.radio_value(
+                        &mut self.selected_permutation_type,
+                        PermutationType::None,
+                        "None",
+                    )
+                    .on_hover_text("Don't show a permutation");
+                    ui.radio_value(
+                        &mut self.selected_permutation_type,
+                        PermutationType::StandardToLabellingAut,
+                        "To Standard Labelling",
+                    )
+                    .on_hover_text(
+                        "\
+The permutation taking the ordered foursomes to the ordered columns \
+and the labelling labels to the row labels",
+                    );
+                    ui.radio_value(
+                        &mut self.selected_permutation_type,
+                        PermutationType::LabellingToStandardAut,
+                        "From Standard Labelling",
+                    )
+                    .on_hover_text(
+                        "\
+The permutation taking ordered columns to the ordered foursomes \
+and the row labels to the labelling labels",
+                    );
+                    ui.radio_value(
+                        &mut self.selected_permutation_type,
+                        PermutationType::SextetStabilizer,
+                        "Sextet Stabilizer",
+                    )
+                    .on_hover_text(
+                        "\
+Configure permutations which preserve the unordered sextet",
+                    );
+
+                    if self.selected_permutation_type == PermutationType::SextetStabilizer {
+                        ui.heading("Sextet Stabilizer Configuration");
+
+                        ui.horizontal(|ui| {
+                            if ui.button("Reset").clicked() {
+                                self.sextet_stabilizer_permutation = SextetStabilizer::default();
+                            }
+
+                            if ui.button("×ω").clicked() {
+                                for foursome_perm in
+                                    &mut self.sextet_stabilizer_permutation.inner_permutations
+                                {
+                                    *foursome_perm = &Permutation::new_cycle(vec![
+                                        &F4Point::One,
+                                        &F4Point::Alpha,
+                                        &F4Point::Beta,
+                                    ]) * &*foursome_perm;
+                                }
+                            }
+                            if ui.button("Conjugate").clicked() {
+                                for foursome_perm in
+                                    &mut self.sextet_stabilizer_permutation.inner_permutations
+                                {
+                                    *foursome_perm =
+                                        &Permutation::new_swap(&F4Point::Alpha, &F4Point::Beta)
+                                            * &*foursome_perm;
+                                }
+                            }
+                        });
+
+                        egui_dnd::dnd(ui, "foursome_permutation").show_vec(
+                            &mut self.sextet_stabilizer_permutation.foursome_permutation,
+                            |ui, item, handle, state| {
+                                ui.horizontal(|ui| {
+                                    handle.ui(ui, |ui| {
+                                        ui.horizontal(|ui| {
+                                            ui.add_enabled(
+                                                true,
+                                                Button::new(format!(
+                                                    "Foursome {}",
+                                                    self.ordering
+                                                        .iter()
+                                                        .find(|index| {
+                                                            item.index() == index.index()
+                                                        })
+                                                        .unwrap()
+                                                        .index()
+                                                        + 1
+                                                ))
+                                                .fill(
+                                                    sextet_idx_to_colour(
+                                                        self.ordering[item.index()].index(),
+                                                    )
+                                                    .linear_multiply(0.3)
+                                                        + ui.visuals()
+                                                            .panel_fill
+                                                            .linear_multiply(0.7),
+                                                ),
+                                            );
+                                        });
+                                    });
+
+                                    let foursome_perm = &mut self
+                                        .sextet_stabilizer_permutation
+                                        .inner_permutations[item.index()];
+
+                                    if ui.button("+1").clicked() {
+                                        *foursome_perm =
+                                            &Permutation::new_swap(&F4Point::Zero, &F4Point::One)
+                                                * &*foursome_perm;
+                                        *foursome_perm =
+                                            &Permutation::new_swap(&F4Point::Alpha, &F4Point::Beta)
+                                                * &*foursome_perm;
+                                    }
+                                    if ui.button("+ω").clicked() {
+                                        *foursome_perm =
+                                            &Permutation::new_swap(&F4Point::Zero, &F4Point::Alpha)
+                                                * &*foursome_perm;
+                                        *foursome_perm =
+                                            &Permutation::new_swap(&F4Point::One, &F4Point::Beta)
+                                                * &*foursome_perm;
+                                    }
+                                    if ui.button("×ω").clicked() {
+                                        *foursome_perm = &Permutation::new_cycle(vec![
+                                            &F4Point::One,
+                                            &F4Point::Alpha,
+                                            &F4Point::Beta,
+                                        ]) * &*foursome_perm;
+                                    }
+                                    if ui.button("Conjugate").clicked() {
+                                        *foursome_perm =
+                                            &Permutation::new_swap(&F4Point::Alpha, &F4Point::Beta)
+                                                * &*foursome_perm;
+                                    }
+                                });
+                                if state.index == 1 || state.index == 3 {
+                                    ui.add_space(4.0);
+                                }
+                            },
+                        );
+                    }
+
+                    if let Some(permutation) = permutation.as_ref()
+                        && let Some(new_state) = ui
+                            .horizontal(|ui| {
+                                let mut is_aut = mog().is_automorphism(permutation);
+                                let text = if is_aut {
+                                    "This permutation is an automorphism"
+                                } else {
+                                    "This permutation is not an automorphism"
+                                };
+                                ui.checkbox(&mut is_aut, "Automorphism").on_hover_text(text);
+
+                                if ui.button("Select").clicked() {
+                                    return Some(Box::<dyn AppState>::from(Box::new(
+                                        crate::ui::permutation_selection::State::new(
+                                            Some(self.clone()),
+                                            permutation.clone(),
+                                        ),
+                                    )));
+                                }
+                                None
+                            })
+                            .inner
+                    {
+                        return Some(new_state);
+                    };
+                }
 
                 None
             })
             .inner
         {
-            return Some(Box::new(new_state));
-        }
-
-        let allowed_labels = self.allowed_labels();
-        let completed_labels = self.complete_labelling();
-        let mut hovered_point = None;
-
-        struct State<'a> {
-            labelling: &'a mut Labelled<Point, Option<F4Point>>,
-            allowed_labels: &'a Labelled<Point, HashSet<F4Point>>,
-            completed_labels: &'a Option<OrderedSextetLabelling>,
-            hovered_point: &'a mut Option<Point>,
+            return Some(new_state);
         }
 
         let point_to_cell = |p: Point| -> GridCell {
@@ -507,118 +755,112 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
             (i as isize % 6, i as isize / 6)
         };
 
-        let mut grid = super::grid::GridVisuals::<State>::default();
+        let mut grid_builder = super::grid::GridBuilder::default();
 
         // The 6x4 MOG grid
-        for (foursome_idx, foursome) in self.sextet.iter().enumerate() {
+        for foursome in &self.sextet {
             for p in foursome.points() {
-                grid.draw_cell(
-                    point_to_cell(p),
-                    Box::new(move |ui, response, painter, rect, state| {
-                        let colour = sextet_idx_to_colour(foursome_idx);
-
-                        // Draw the coloured box for the point of the MOG
-                        painter.rect_filled(
-                            rect,
-                            10.0,
-                            colour.linear_multiply(0.3)
-                                + ui.visuals().faint_bg_color.linear_multiply(0.7),
-                        );
-
-                        // Check if the mouse is over this point
-                        if let Some(pos) = response.hover_pos()
-                            && rect.contains(pos)
-                        {
-                            *state.hovered_point = Some(p);
-                        }
-
-                        // Draw a border when dragging to indicate a label can be set here
-                        if response.is_pointer_button_down_on()
-                            && (!state.allowed_labels.get(p).is_empty()
-                                || state.labelling.get(p).is_some())
-                        {
-                            painter.rect_stroke(
-                                rect,
-                                10.0,
-                                ui.visuals().widgets.hovered.fg_stroke,
-                                eframe::egui::StrokeKind::Middle,
-                            );
-                        }
-
-                        if (response.is_pointer_button_down_on()
-                            || response.drag_stopped()
-                            || response.clicked())
-                            && rect.contains(response.interact_pointer_pos().unwrap())
-                        {
-                            // Label selection
-                            let result = f4_selection(
-                                ui,
-                                painter,
-                                response,
-                                rect,
-                                state.allowed_labels.get(p).clone(),
-                                state.labelling.get(p).is_some(),
-                            );
-                            if response.drag_stopped() || response.clicked() {
-                                match result {
-                                    crate::ui::mog::F4SelectionResult::None => {}
-                                    crate::ui::mog::F4SelectionResult::Point(label) => {
-                                        state.labelling.set(p, Some(label));
-                                    }
-                                    crate::ui::mog::F4SelectionResult::Cross => {
-                                        state.labelling.set(p, None);
-                                    }
-                                }
-                            }
-                        } else if let Some(label) = *state.labelling.get(p) {
-                            // Draw labels
-                            draw_f4(ui, painter, rect, ui.visuals().strong_text_color(), label);
-                        } else if let Some(completed_labels) = state.completed_labels {
-                            draw_f4(
-                                ui,
-                                painter,
-                                rect,
-                                ui.visuals().weak_text_color(),
-                                *completed_labels.labels().get(p),
-                            );
-                        }
-                    }),
-                );
+                grid_builder.include_cell(point_to_cell(p));
             }
         }
 
         CentralPanel::default().show(ctx, |ui| {
-            let (_response, painter, state, coordinates) = grid.show(
-                ui,
-                State {
-                    labelling: &mut self.labelling,
-                    allowed_labels: &allowed_labels,
-                    completed_labels: &completed_labels,
-                    hovered_point: &mut hovered_point,
-                },
-            );
+            let (response, painter, grid) = grid_builder.show(ui);
 
-            if let Some(completed_labels) = &completed_labels {
-                let permutation: Permutation<GridCell> = Permutation::from_fn(|p| Point {
-                    col: *completed_labels.foursomes().get(p),
-                    row: *completed_labels.labels().get(p),
-                })
-                .map_injective_unchecked(point_to_cell);
+            // The 6x4 MOG grid
+            for (foursome_idx, foursome) in self.sextet.iter().enumerate() {
+                for p in foursome.points() {
+                    let rect = grid.cell_to_rect(point_to_cell(p));
 
-                self.permutation_shapes
-                    .set_permutation(permutation, coordinates);
+                    let colour = sextet_idx_to_colour(foursome_idx);
 
-                for (cycle, shape) in self.permutation_shapes.shapes() {
-                    let colour = if let Some(p) = state.hovered_point
-                        && cycle.contains(&point_to_cell(*p))
+                    // Draw the coloured box for the point of the MOG
+                    painter.rect_filled(
+                        rect,
+                        10.0,
+                        colour.linear_multiply(0.3)
+                            + ui.visuals().faint_bg_color.linear_multiply(0.7),
+                    );
+
+                    // Check if the mouse is over this point
+                    if let Some(pos) = response.hover_pos()
+                        && rect.contains(pos)
                     {
-                        Color32::BLACK
-                    } else {
-                        Color32::BLACK * Color32::from_white_alpha(96)
-                    };
+                        hovered_point = Some(p);
+                    }
 
-                    painter.add(shape.to_egui_mesh(colour));
+                    // Draw a border when dragging to indicate a label can be set here
+                    if response.is_pointer_button_down_on()
+                        && (!allowed_labels.get(p).is_empty() || self.labelling.get(p).is_some())
+                    {
+                        painter.rect_stroke(
+                            rect,
+                            10.0,
+                            ui.visuals().widgets.hovered.fg_stroke,
+                            eframe::egui::StrokeKind::Middle,
+                        );
+                    }
+
+                    if (response.is_pointer_button_down_on()
+                        || response.drag_stopped()
+                        || response.clicked())
+                        && rect.contains(response.interact_pointer_pos().unwrap())
+                    {
+                        // Label selection
+                        let result = f4_selection(
+                            ui,
+                            &painter,
+                            &response,
+                            rect,
+                            allowed_labels.get(p).clone(),
+                            self.labelling.get(p).is_some(),
+                        );
+                        if response.drag_stopped() || response.clicked() {
+                            match result {
+                                crate::ui::mog::F4SelectionResult::None => {}
+                                crate::ui::mog::F4SelectionResult::Point(label) => {
+                                    self.labelling.set(p, Some(label));
+                                }
+                                crate::ui::mog::F4SelectionResult::Cross => {
+                                    self.labelling.set(p, None);
+                                }
+                            }
+                        }
+                    } else if let Some(label) = *self.labelling.get(p) {
+                        // Draw labels
+                        draw_f4(ui, &painter, rect, ui.visuals().strong_text_color(), label);
+                    } else if let Some(completed_labels) = completed_labels.clone() {
+                        draw_f4(
+                            ui,
+                            &painter,
+                            rect,
+                            ui.visuals().weak_text_color(),
+                            *completed_labels.labels().get(p),
+                        );
+                    }
                 }
+            }
+
+            // Draw the selected permutation
+            let cell_permutation = permutation
+                .clone()
+                .map(|permutation| permutation.map_injective_unchecked(point_to_cell));
+
+            self.permutation_shapes
+                .set_permutation(cell_permutation, grid);
+
+            let colour = ui.visuals().strong_text_color();
+
+            for (cycle, shape) in self.permutation_shapes.shapes() {
+                let colour = if let Some(p) = hovered_point
+                    && cycle.contains(&point_to_cell(p))
+                {
+                    colour
+                } else {
+                    colour * Color32::from_white_alpha(96)
+                };
+
+                painter.add(shape.to_egui_mesh(colour));
             }
         });
 
