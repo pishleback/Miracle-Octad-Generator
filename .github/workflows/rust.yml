@@ -22,42 +22,42 @@ jobs:
     - name: Check Formatting
       run: cargo fmt --all -- --check
 
-  # check:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #   - name: Checkout repository
-  #     uses: actions/checkout@v4
+  check:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-  #   - name: Install Linux Dependencies
-  #     run: sudo apt install libfontconfig1-dev
+    - name: Install Linux Dependencies
+      run: sudo apt install libfontconfig1-dev
 
-  #   - name: Run Code Debug Checks
-  #     run: cargo check --all-targets --all-features
-  #     env:
-  #       RUSTFLAGS: "-D warnings"
+    - name: Run Code Debug Checks
+      run: cargo check --all-targets --all-features
+      env:
+        RUSTFLAGS: "-D warnings"
 
-  #   - name: Run Code Release Checks
-  #     run: cargo check --all-targets --all-features --release
-  #     env:
-  #       RUSTFLAGS: "-D warnings"
+    - name: Run Code Release Checks
+      run: cargo check --all-targets --all-features --release
+      env:
+        RUSTFLAGS: "-D warnings"
 
-  # clippy:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #   - name: Checkout repository
-  #     uses: actions/checkout@v4
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-  #   - name: Install Linux Dependencies
-  #     run: sudo apt install libfontconfig1-dev
+    - name: Install Linux Dependencies
+      run: sudo apt install libfontconfig1-dev
 
-  #   - name: Install Clippy
-  #     run: rustup component add clippy
+    - name: Install Clippy
+      run: rustup component add clippy
 
-  #   - name: Run Clippy Debug Checks
-  #     run: cargo clippy -- -D warnings
+    - name: Run Clippy Debug Checks
+      run: cargo clippy -- -D warnings
 
-  #   - name: Run Clippy Release Checks
-  #     run: cargo clippy -- -D warnings
+    - name: Run Clippy Release Checks
+      run: cargo clippy -- -D warnings
 
   test_debug:
     runs-on: ubuntu-latest

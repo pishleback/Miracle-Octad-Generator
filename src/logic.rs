@@ -1,3 +1,6 @@
+
+#![allow(dead_code)]
+
 pub mod permutation {
     use std::{
         collections::{HashMap, HashSet},
@@ -742,6 +745,7 @@ pub mod miracle_octad_generator {
             let mut codewords = HashSet::new();
             for b in 0usize..(1 << basis.len()) {
                 let mut codeword = Vector::zero();
+                #[allow(clippy::needless_range_loop)]
                 for i in 0..basis.len() {
                     if b & (1usize << i) != 0 {
                         codeword = &codeword + &basis[i];
@@ -784,7 +788,7 @@ pub mod miracle_octad_generator {
                 return Err(());
             }
             for codeword in &self.codewords {
-                if codeword.weight() == 8 && codeword.contains(&vector) {
+                if codeword.weight() == 8 && codeword.contains(vector) {
                     return Ok(codeword.clone());
                 }
             }
@@ -841,7 +845,7 @@ pub mod miracle_octad_generator {
             assert!(t1.contains_point(z));
             assert!(t2.contains_point(w));
             assert_ne!(y, z);
-            let mut labels = Labelled::new_constant(&F4Point::Zero);
+            let mut labels = Labelled::new_constant(F4Point::Zero);
             debug_assert_eq!(*labels.get(x), F4Point::Zero);
             debug_assert_eq!(*labels.get(y), F4Point::Zero);
             labels.set(z, F4Point::One);
