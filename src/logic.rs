@@ -1002,4 +1002,12 @@ pub mod miracle_octad_generator {
             }
         }
     }
+
+    impl BinaryGolayCode {
+        pub fn is_automorphism(&self, permutation: &Permutation<Point>) -> bool {
+            self.basis
+                .iter()
+                .all(|b| self.codewords.contains(&b.permute(permutation)))
+        }
+    }
 }

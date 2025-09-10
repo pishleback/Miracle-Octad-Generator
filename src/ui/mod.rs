@@ -158,31 +158,24 @@ mod mog {
 
 mod grid {
     use eframe::egui::{Painter, Pos2, Rect, Response, Sense, Vec2};
-    use std::collections::HashMap;
+    use std::collections::HashSet;
 
     pub type GridCell = (isize, isize);
 
-    pub type GridCellShower<State> = dyn FnOnce(
-        &mut eframe::egui::Ui,
-        &eframe::egui::Response,
-        &eframe::egui::Painter,
-        eframe::egui::Rect,
-        &mut State,
-    );
-
-    pub struct GridVisuals<State> {
+    pub struct GridBuilder {
         pad: f32, // The gap between squares
-        elements: HashMap<GridCell, Box<GridCellShower<State>>>,
+        elements: HashSet<GridCell>,
     }
 
     #[derive(Debug, Clone, PartialEq)]
-    pub struct GridCoordinates {
+    pub struct GridShower {
         rect: Rect,
         unit: f32,
+        pad: f32,
         min_cell: GridCell,
     }
 
-    impl GridCoordinates {
+    impl GridShower {
         pub fn cell_to_pos(&self, cell: GridCell) -> Pos2 {
             Pos2 {
                 x: self.rect.left() + ((cell.0 - self.min_cell.0) as f32 + 0.5) * self.unit,
@@ -190,34 +183,40 @@ mod grid {
             }
         }
 
+        pub fn cell_to_rect(&self, cell: GridCell) -> Rect {
+            Rect::from_center_size(
+                self.cell_to_pos(cell),
+                Vec2 {
+                    x: self.unit - self.pad,
+                    y: self.unit - self.pad,
+                },
+            )
+        }
+
         pub fn cell_scalar_to_pos_scalar(&self, lambda: f32) -> f32 {
             lambda * self.unit
         }
     }
 
-    impl<State> Default for GridVisuals<State> {
+    impl Default for GridBuilder {
         fn default() -> Self {
             Self {
                 pad: 10.0,
-                elements: HashMap::new(),
+                elements: HashSet::new(),
             }
         }
     }
 
-    impl<State> GridVisuals<State> {
-        pub fn draw_cell(&mut self, cell: GridCell, shower: Box<GridCellShower<State>>) {
-            self.elements.insert(cell, shower);
+    impl GridBuilder {
+        pub fn include_cell(&mut self, cell: GridCell) {
+            self.elements.insert(cell);
         }
 
-        pub fn show(
-            self,
-            ui: &mut eframe::egui::Ui,
-            mut state: State,
-        ) -> (Response, Painter, State, GridCoordinates) {
-            let min_i = self.elements.keys().map(|(i, _)| *i).min().unwrap_or(0);
-            let max_i = self.elements.keys().map(|(i, _)| *i).max().unwrap_or(0);
-            let min_j = self.elements.keys().map(|(_, j)| *j).min().unwrap_or(0);
-            let max_j = self.elements.keys().map(|(_, j)| *j).max().unwrap_or(0);
+        pub fn show(self, ui: &mut eframe::egui::Ui) -> (Response, Painter, GridShower) {
+            let min_i = self.elements.iter().map(|(i, _)| *i).min().unwrap_or(0);
+            let max_i = self.elements.iter().map(|(i, _)| *i).max().unwrap_or(0);
+            let min_j = self.elements.iter().map(|(_, j)| *j).min().unwrap_or(0);
+            let max_j = self.elements.iter().map(|(_, j)| *j).max().unwrap_or(0);
             let size_i = max_i - min_i + 1;
             let size_j = max_j - min_j + 1;
 
@@ -235,27 +234,15 @@ mod grid {
                 },
                 Sense::click_and_drag(),
             );
-            let unit = response.rect.width() / (size_i as f32);
 
-            let coordinates = GridCoordinates {
+            let coordinates = GridShower {
                 rect: response.rect,
-                unit,
+                unit: response.rect.width() / (size_i as f32),
+                pad: self.pad,
                 min_cell: (min_i, min_j),
             };
 
-            for (cell, shower) in self.elements {
-                let pos = coordinates.cell_to_pos(cell);
-                let rect = Rect::from_center_size(
-                    pos,
-                    Vec2 {
-                        x: unit - self.pad,
-                        y: unit - self.pad,
-                    },
-                );
-                shower(ui, &response, &painter, rect, &mut state);
-            }
-
-            (response, painter, state, coordinates)
+            (response, painter, coordinates)
         }
     }
 }
