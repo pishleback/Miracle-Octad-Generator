@@ -13,7 +13,7 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     eframe::run_native(
-        "Drawable Canvas with Colors",
+        "Miracle Octad Generator Tool",
         options,
         Box::new(|cc| {
             setup_custom_fonts(&cc.egui_ctx);
