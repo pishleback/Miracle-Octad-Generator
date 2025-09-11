@@ -1,10 +1,10 @@
-use crate::logic::permutation::Permutation;
-use crate::logic::traits::{Enumerated, Labelled};
-use crate::logic::{hexacode, miracle_octad_generator::*};
-use crate::ui::grid::GridCell;
-use crate::ui::mog::mog;
-use crate::ui::mog_permutation_shapes::MogPermutationShapeCache;
-use crate::{
+use crate::app::logic::permutation::Permutation;
+use crate::app::logic::traits::{Enumerated, Labelled};
+use crate::app::logic::{hexacode, miracle_octad_generator::*};
+use crate::app::ui::grid::GridCell;
+use crate::app::ui::mog::mog;
+use crate::app::ui::mog_permutation_shapes::MogPermutationShapeCache;
+use crate::app::{
     AppState,
     logic::finite_field_4::Point as F4Point,
     ui::mog::{draw_f4, f4_selection, sextet_idx_to_colour},
@@ -455,7 +455,7 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                     foursome4
                 );
 
-                let mog = crate::ui::mog::mog();
+                let mog = crate::app::ui::mog::mog();
                 // This labelling gives point1 and point2 a label of 0, point3 a label of 1, and point4 a label of z/(x+y)
                 let mut labelling = mog.complete_labelling(
                     ordered_sextet,
@@ -536,7 +536,7 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
         };
 
         if let Some(new_state) = SidePanel::left("left_panel")
-            .exact_width(300.0)
+            .min_width(200.0)
             .show(ctx, |ui| {
                 // Back
                 if ui.button("Back").clicked() {
@@ -554,8 +554,8 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
                             ui.add_enabled(
                                 true,
                                 Button::new(format!("Foursome {}", state.index + 1)).fill(
-                                    sextet_idx_to_colour(item.index()).linear_multiply(0.3)
-                                        + ui.visuals().panel_fill.linear_multiply(0.7),
+                                    sextet_idx_to_colour(item.index())
+                                        .lerp_to_gamma(ui.visuals().panel_fill, 0.6),
                                 ),
                             );
                         });
@@ -667,10 +667,7 @@ Configure permutations which preserve the unordered sextet",
                                                     sextet_idx_to_colour(
                                                         self.ordering[item.index()].index(),
                                                     )
-                                                    .linear_multiply(0.3)
-                                                        + ui.visuals()
-                                                            .panel_fill
-                                                            .linear_multiply(0.7),
+                                                    .lerp_to_gamma(ui.visuals().panel_fill, 0.6),
                                                 ),
                                             );
                                         });
@@ -729,7 +726,7 @@ Configure permutations which preserve the unordered sextet",
 
                                 if ui.button("Select").clicked() {
                                     return Some(Box::<dyn AppState>::from(Box::new(
-                                        crate::ui::permutation_selection::State::new(
+                                        crate::app::ui::permutation_selection::State::new(
                                             Some(self.clone()),
                                             permutation.clone(),
                                         ),
@@ -777,9 +774,8 @@ Configure permutations which preserve the unordered sextet",
                     // Draw the coloured box for the point of the MOG
                     painter.rect_filled(
                         rect,
-                        10.0,
-                        colour.linear_multiply(0.3)
-                            + ui.visuals().faint_bg_color.linear_multiply(0.7),
+                        grid.cell_scalar_to_pos_scalar(0.05),
+                        colour.lerp_to_gamma(ui.visuals().faint_bg_color, 0.6),
                     );
 
                     // Check if the mouse is over this point
@@ -795,7 +791,7 @@ Configure permutations which preserve the unordered sextet",
                     {
                         painter.rect_stroke(
                             rect,
-                            10.0,
+                            grid.cell_scalar_to_pos_scalar(0.05),
                             ui.visuals().widgets.hovered.fg_stroke,
                             eframe::egui::StrokeKind::Middle,
                         );
@@ -817,11 +813,11 @@ Configure permutations which preserve the unordered sextet",
                         );
                         if response.drag_stopped() || response.clicked() {
                             match result {
-                                crate::ui::mog::F4SelectionResult::None => {}
-                                crate::ui::mog::F4SelectionResult::Point(label) => {
+                                crate::app::ui::mog::F4SelectionResult::None => {}
+                                crate::app::ui::mog::F4SelectionResult::Point(label) => {
                                     self.labelling.set(p, Some(label));
                                 }
-                                crate::ui::mog::F4SelectionResult::Cross => {
+                                crate::app::ui::mog::F4SelectionResult::Cross => {
                                     self.labelling.set(p, None);
                                 }
                             }
@@ -834,7 +830,7 @@ Configure permutations which preserve the unordered sextet",
                             ui,
                             &painter,
                             rect,
-                            ui.visuals().weak_text_color(),
+                            ui.visuals().text_color(),
                             *completed_labels.labels().get(p),
                         );
                     }

@@ -1,4 +1,4 @@
-use crate::{
+use crate::app::{
     logic::permutation::Permutation,
     ui::{
         grid::{GridCell, GridShower},

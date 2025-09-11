@@ -1,13 +1,12 @@
 #![allow(dead_code)]
 
 pub mod permutation {
+    use super::traits::Enumerated;
     use std::{
         collections::{HashMap, HashSet},
         hash::Hash,
         ops::Mul,
     };
-
-    use crate::logic::traits::Enumerated;
 
     #[derive(Debug, Clone)]
     pub struct Permutation<T: PartialEq + Eq + Hash> {
@@ -146,7 +145,7 @@ pub mod permutation {
 }
 
 pub mod traits {
-    use crate::logic::permutation::Permutation;
+    use super::permutation::Permutation;
     use std::{borrow::Borrow, marker::PhantomData};
 
     pub trait Enumerated: Sized {
@@ -239,9 +238,8 @@ pub mod traits {
 }
 
 pub mod finite_field_4 {
+    use super::traits::Enumerated;
     use std::ops::{Add, Mul};
-
-    use crate::logic::traits::Enumerated;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub enum Point {
@@ -334,7 +332,7 @@ pub mod finite_field_4 {
 
 pub mod hexacode {
     use super::finite_field_4::Point as F4Point;
-    use crate::logic::traits::{Enumerated, Labelled};
+    use super::traits::{Enumerated, Labelled};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub enum Side {
@@ -440,7 +438,7 @@ pub mod hexacode {
 
 pub mod miracle_octad_generator {
     use super::finite_field_4::Point as F4Point;
-    use crate::logic::{
+    use super::{
         hexacode,
         permutation::Permutation,
         traits::{Enumerated, Labelled},

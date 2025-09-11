@@ -5,11 +5,12 @@ pub mod sextet_labelling;
 pub mod shape;
 
 mod mog {
-    use crate::logic::finite_field_4::Point as F4Point;
-    use crate::logic::miracle_octad_generator::BinaryGolayCode;
     use eframe::egui::{Color32, Rect};
     use std::collections::HashSet;
     use std::sync::OnceLock;
+
+    use crate::app::logic::finite_field_4::Point as F4Point;
+    use crate::app::logic::miracle_octad_generator::BinaryGolayCode;
 
     static MOG: OnceLock<BinaryGolayCode> = OnceLock::new();
 
@@ -131,10 +132,10 @@ mod mog {
                 if point == selected_point {
                     ui.visuals().strong_text_color()
                 } else {
-                    ui.visuals().weak_text_color()
+                    ui.visuals().text_color()
                 }
             } else {
-                ui.visuals().weak_text_color()
+                ui.visuals().text_color()
             };
             draw_f4(ui, painter, point_rect, colour, point);
         }
@@ -147,7 +148,7 @@ mod mog {
                 eframe::egui::FontId::proportional(0.4 * middle.height()),
                 match result {
                     F4SelectionResult::Cross => ui.visuals().strong_text_color(),
-                    _ => ui.visuals().weak_text_color(),
+                    _ => ui.visuals().text_color(),
                 },
             );
         }
@@ -187,8 +188,8 @@ mod grid {
             Rect::from_center_size(
                 self.cell_to_pos(cell),
                 Vec2 {
-                    x: self.unit - self.pad,
-                    y: self.unit - self.pad,
+                    x: self.unit - self.unit * self.pad,
+                    y: self.unit - self.unit * self.pad,
                 },
             )
         }
@@ -201,7 +202,7 @@ mod grid {
     impl Default for GridBuilder {
         fn default() -> Self {
             Self {
-                pad: 10.0,
+                pad: 0.05,
                 elements: HashSet::new(),
             }
         }
@@ -223,6 +224,12 @@ mod grid {
             let (response, painter) = ui.allocate_painter(
                 {
                     let available = ui.available_size();
+
+                    let available = Vec2 {
+                        x: available.x,
+                        y: f32::min(available.y, 600.0),
+                    };
+
                     let mut size = Vec2 {
                         x: available.x,
                         y: (size_j as f32 / size_i as f32) * available.x,

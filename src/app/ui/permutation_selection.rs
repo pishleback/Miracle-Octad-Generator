@@ -1,9 +1,9 @@
-use crate::logic::miracle_octad_generator::*;
-use crate::logic::permutation::Permutation;
-use crate::logic::traits::Enumerated;
-use crate::ui::grid::GridCell;
-use crate::ui::mog_permutation_shapes::MogPermutationShapeCache;
-use crate::{AppState, ui::mog::mog};
+use crate::app::logic::miracle_octad_generator::*;
+use crate::app::logic::permutation::Permutation;
+use crate::app::logic::traits::Enumerated;
+use crate::app::ui::grid::GridCell;
+use crate::app::ui::mog_permutation_shapes::MogPermutationShapeCache;
+use crate::app::{AppState, ui::mog::mog};
 use eframe::{
     Frame,
     egui::{CentralPanel, Color32, Context, SidePanel},
@@ -41,7 +41,7 @@ impl<PrevState: AppState + Clone + 'static> AppState for State<PrevState> {
         let mog = mog();
 
         if let Some(new_state) = SidePanel::left("left_panel")
-            .exact_width(200.0)
+            .min_width(200.0)
             .show(ctx, |ui| {
                 // Back
                 if let Some(prev_state) = self.prev_state.as_ref()
@@ -90,7 +90,11 @@ impl<PrevState: AppState + Clone + 'static> AppState for State<PrevState> {
                 let rect = grid.cell_to_rect(point_to_cell(p));
 
                 // Draw square
-                painter.rect_filled(rect, 10.0, ui.visuals().widgets.inactive.bg_fill);
+                painter.rect_filled(
+                    rect,
+                    grid.cell_scalar_to_pos_scalar(0.05),
+                    ui.visuals().widgets.inactive.bg_fill,
+                );
 
                 // Check if the mouse is over this point
                 if let Some(pos) = response.hover_pos()

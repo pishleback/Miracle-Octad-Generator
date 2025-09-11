@@ -1,10 +1,10 @@
-use crate::logic::finite_field_4::Point as F4Point;
-use crate::logic::miracle_octad_generator::*;
-use crate::logic::permutation::Permutation;
-use crate::logic::traits::{Enumerated, Labelled};
-use crate::ui::grid::GridCell;
-use crate::ui::mog::sextet_idx_to_colour;
-use crate::{
+use crate::app::logic::finite_field_4::Point as F4Point;
+use crate::app::logic::miracle_octad_generator::*;
+use crate::app::logic::permutation::Permutation;
+use crate::app::logic::traits::{Enumerated, Labelled};
+use crate::app::ui::grid::GridCell;
+use crate::app::ui::mog::sextet_idx_to_colour;
+use crate::app::{
     AppState,
     ui::mog::{draw_f4, row_to_f4},
 };
@@ -32,7 +32,7 @@ impl AppState for State {
         let mut coloured_highlight_points = Labelled::<Point, Option<Color32>>::new_constant(None);
 
         if let Some(new_state) = SidePanel::left("left_panel")
-            .exact_width(200.0)
+            .min_width(200.0)
             .show(ctx, |ui| {
                 let mog = super::mog::mog();
 
@@ -40,7 +40,7 @@ impl AppState for State {
                 ui.heading("Permutations");
                 if ui.button("Permutation Editor").clicked() {
                     return Some(Box::<dyn AppState>::from(Box::new(
-                        crate::ui::permutation_selection::State::new(
+                        crate::app::ui::permutation_selection::State::new(
                             Some(self.clone()),
                             Permutation::identity(),
                         ),
@@ -233,10 +233,18 @@ The sextet whose foursomes are the differences between these points and the near
                     .unwrap_or(*self.selected_points.get(p))
                 {
                     // Selected
-                    painter.rect_filled(rect, 10.0, ui.visuals().selection.bg_fill);
+                    painter.rect_filled(
+                        rect,
+                        grid.cell_scalar_to_pos_scalar(0.05),
+                        ui.visuals().selection.bg_fill,
+                    );
                 } else {
                     // Not selected
-                    painter.rect_filled(rect, 10.0, ui.visuals().widgets.inactive.bg_fill);
+                    painter.rect_filled(
+                        rect,
+                        grid.cell_scalar_to_pos_scalar(0.05),
+                        ui.visuals().widgets.inactive.bg_fill,
+                    );
                 }
 
                 // Highlight if mouse over
@@ -250,7 +258,7 @@ The sextet whose foursomes are the differences between these points and the near
                 } {
                     painter.rect_stroke(
                         rect,
-                        10.0,
+                        grid.cell_scalar_to_pos_scalar(0.05),
                         ui.visuals().widgets.hovered.fg_stroke,
                         eframe::egui::StrokeKind::Middle,
                     );
@@ -260,11 +268,10 @@ The sextet whose foursomes are the differences between these points and the near
                 if let Some(colour) = coloured_highlight_points.get(p) {
                     painter.rect_stroke(
                         rect,
-                        10.0,
+                        grid.cell_scalar_to_pos_scalar(0.05),
                         eframe::egui::Stroke::new(
                             3.0,
-                            colour.linear_multiply(0.7)
-                                + ui.visuals().faint_bg_color.linear_multiply(0.3),
+                            colour.lerp_to_gamma(ui.visuals().faint_bg_color, 0.4),
                         ),
                         eframe::egui::StrokeKind::Inside,
                     );
