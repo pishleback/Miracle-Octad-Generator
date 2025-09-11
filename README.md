@@ -5,9 +5,7 @@ You can experiment with the latest version directly in your browser:
 👉 [Play with it here](https://pishleback.github.io/Miracle-Octad-Generator/)
 
 ## What Is It For?  
-This project provides an interactive graphical interface for the [Miracle Octad Generator](https://en.wikipedia.org/wiki/Miracle_Octad_Generator), a powerful tool in combinatorial design and group theory.  
-
-The Miracle Octad Generator is a tool especially useful for exploring:  
+This project provides an interactive graphical interface for the [Miracle Octad Generator](https://en.wikipedia.org/wiki/Miracle_Octad_Generator), a tool in combinatorial design and group theory especially useful for exploring:  
 - The [Steiner system](https://en.wikipedia.org/wiki/Steiner_system) $S(5, 8, 24)$
 - The [extended binary Golay code](https://en.wikipedia.org/wiki/Binary_Golay_code) and the [perfect binary Golay code](https://en.wikipedia.org/wiki/Binary_Golay_code)  
 - The [Mathieu group](https://en.wikipedia.org/wiki/Mathieu_group) $M_{24}$ and its subgroups  
