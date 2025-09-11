@@ -26,7 +26,7 @@ impl Default for MyApp {
         Self {
             state: Box::new(ui::point_toggle::State::default()),
             // state: Box::new(ui::permutation_selection::State::default()),
-            ppp: 1.0,
+            ppp: 2.5,
         }
     }
 }
