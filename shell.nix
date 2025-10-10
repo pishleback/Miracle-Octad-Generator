@@ -3,6 +3,16 @@
     overrides = (builtins.fromTOML (builtins.readFile ./rust-toolchain.toml));
     libPath = with pkgs; lib.makeLibraryPath [
       # load external libraries that you need in your rust project here
+      xorg.libX11
+      xorg.libXcursor
+      xorg.libXrandr
+      xorg.libXi
+      xorg.libxcb
+      libxkbcommon
+      vulkan-loader
+      wayland
+      libGL
+      mesa
     ];
 in
   pkgs.mkShell rec {
