@@ -1,5 +1,4 @@
 pub mod mog_permutation_shapes;
-pub mod permutation_selection;
 pub mod point_toggle;
 pub mod sextet_labelling;
 pub mod shape;

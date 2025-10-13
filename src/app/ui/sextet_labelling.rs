@@ -726,8 +726,8 @@ Configure permutations which preserve the unordered sextet",
 
                                 if ui.button("Select").clicked() {
                                     return Some(Box::<dyn AppState>::from(Box::new(
-                                        crate::app::ui::permutation_selection::State::new(
-                                            Some(self.clone()),
+                                        crate::app::ui::point_toggle::State::new(
+                                            Labelled::zero(),
                                             permutation.clone(),
                                         ),
                                     )));
