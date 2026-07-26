@@ -11,4 +11,5 @@ pkgs.mkShell {
     mkdir -p tmp
     export TMPDIR=$PWD/tmp
   '';
+  # need to run export TMPDIR=$PWD/tmp in vscode terminal too for some reason??
 }
