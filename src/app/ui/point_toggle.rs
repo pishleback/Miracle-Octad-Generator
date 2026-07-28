@@ -304,7 +304,7 @@ The sextet whose foursomes are the differences between these points and the near
                         rect,
                         grid.cell_scalar_to_pos_scalar(0.05),
                         eframe::egui::Stroke::new(
-                            3.0,
+                            3.0_f32,
                             colour.lerp_to_gamma(ui.visuals().faint_bg_color, 0.4),
                         ),
                         eframe::egui::StrokeKind::Inside,
