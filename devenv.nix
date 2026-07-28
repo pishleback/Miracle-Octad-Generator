@@ -38,7 +38,6 @@
         port = 8080;
         path = "/";
       };
-      initial_delay = 15;
       period = 30;
     };
     restart = {
@@ -54,7 +53,6 @@
         port = 8081;
         path = "/";
       };
-      initial_delay = 15;
       period = 30;
     };
     restart = {
