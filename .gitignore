@@ -13,5 +13,4 @@ tmp
 # https://github.com/lycheeverse/lychee
 .lycheecache
 
-.devenv
-.devenv.flake.nix
+.devenv*
