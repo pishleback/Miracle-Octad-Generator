@@ -25,6 +25,7 @@ type F2 = Modulo<2>;
 #[derive(Clone)]
 pub struct State {
     selected_points: Vector,
+    nearest: Option<(Vector, NearestCodewordsResult)>,
     selected_permutation: ConstSizePermutation<24, Point>,
     permutation_shapes: MogPermutationShapeCache,
     drag_start: Option<Point>, // Set as soon as mouse is pressed
@@ -44,7 +45,8 @@ impl State {
         selected_permutation: ConstSizePermutation<24, Point>,
     ) -> Self {
         Self {
-            selected_points,
+            selected_points: selected_points,
+            nearest: None,
             selected_permutation,
             permutation_shapes: MogPermutationShapeCache::default(),
             drag_start: None,
@@ -100,7 +102,15 @@ impl AppState for State {
                 }
 
                 // The nearest codeword(s)
-                let nearest = nearest_ebgc_codeword(&self.selected_points);
+                let nearest = if let Some((vector, result)) = &self.nearest
+                    && self.selected_points == *vector
+                {
+                    result.clone()
+                } else {
+                    nearest_ebgc_codeword(&self.selected_points)
+                };
+                self.nearest = Some((self.selected_points.clone(), nearest.clone()));
+
                 match nearest {
                     NearestCodewordsResult::Unique { codeword, distance } => {
                         if distance == 0 {
