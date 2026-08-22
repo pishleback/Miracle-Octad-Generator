@@ -1,16 +1,24 @@
-use crate::app::{
-    logic::permutation::Permutation,
-    ui::{
-        grid::{GridCell, GridShower},
-        shape::{Shape, arrowhead_cap},
-    },
+use crate::app::ui::{
+    grid::{GridCell, GridShower},
+    shape::{Shape, arrowhead_cap},
+};
+use algebraeon::structures::{MetaOrderedFiniteSetSignature, MetaPermutationsSignature};
+use algebraeon::{
+    combinatorics::golay_codes::extended_binary_golay_code::Point, sets::sets::ConstSizePermutation,
 };
 use eframe::egui::Vec2;
 use i_overlay::mesh::style::LineCap;
 
+pub fn point_to_grid_cell(pt: &Point) -> GridCell {
+    (
+        pt.col.element_to_enumeration().try_into().unwrap(),
+        pt.row.element_to_enumeration().try_into().unwrap(),
+    )
+}
+
 #[derive(Debug, Clone)]
 pub struct MogPermutationShapeCache {
-    state: Option<(Permutation<GridCell>, GridShower)>,
+    state: Option<(ConstSizePermutation<24, Point>, GridShower)>,
     cycles_and_shapes: Vec<(Vec<GridCell>, Shape)>,
     line_width: f32,
     small_radius: f32,
@@ -38,7 +46,7 @@ impl MogPermutationShapeCache {
 impl MogPermutationShapeCache {
     pub fn set_permutation(
         &mut self,
-        permutation: Option<Permutation<GridCell>>,
+        permutation: Option<ConstSizePermutation<24, Point>>,
         coordinates: GridShower,
     ) {
         let new_state = permutation.map(|permutation| (permutation, coordinates));
@@ -52,11 +60,14 @@ impl MogPermutationShapeCache {
 
                 let draw_line =
                     |shape: &mut Shape,
-                     mut start_cell: GridCell,
-                     mut end_cell: GridCell,
+                     start: &Point,
+                     end: &Point,
                      width: f64,
                      mut start_cap: LineCap<[f64; 2], f64>,
                      mut end_cap: LineCap<[f64; 2], f64>| {
+                        let mut start_cell = point_to_grid_cell(&start);
+                        let mut end_cell: GridCell = point_to_grid_cell(&end);
+
                         if start_cell > end_cell {
                             (start_cell, end_cell) = (end_cell, start_cell);
                             (start_cap, end_cap) = (end_cap, start_cap);
@@ -116,30 +127,29 @@ impl MogPermutationShapeCache {
                     let mut shape = Shape::empty();
                     let n = cycle.len();
                     debug_assert!(n >= 2);
-
                     if n == 2 {
                         // Only draw one line for 2-cycles
-                        let start = *cycle[0];
-                        let end = *cycle[1];
+                        let start = &cycle[0];
+                        let end = &cycle[1];
 
                         draw_line(
                             &mut shape,
-                            start,
-                            end,
+                            &start,
+                            &end,
                             line_width,
                             LineCap::Round(0.1),
                             LineCap::Round(0.1),
                         );
                         shape = &shape
                             | &Shape::regular_polygon(
-                                coordinates.cell_to_pos(start),
+                                coordinates.cell_to_pos(point_to_grid_cell(&start)),
                                 small_radius,
                                 12,
                                 0.0,
                             );
                         shape = &shape
                             | &Shape::regular_polygon(
-                                coordinates.cell_to_pos(end),
+                                coordinates.cell_to_pos(point_to_grid_cell(&end)),
                                 small_radius,
                                 12,
                                 0.0,
@@ -150,8 +160,8 @@ impl MogPermutationShapeCache {
                         // If there are multiple equally longest lines, pick one to omit in a systematic way
                         let mut lines = vec![];
                         for i in 0..n {
-                            let start = *cycle[i];
-                            let end = *cycle[(i + 1) % n];
+                            let start = &cycle[i];
+                            let end = &cycle[(i + 1) % n];
                             debug_assert_ne!(start, end);
                             lines.push((start, end));
                         }
@@ -159,11 +169,18 @@ impl MogPermutationShapeCache {
                             let d = (x.0.abs_diff(y.0), x.1.abs_diff(y.1));
                             d.0 * d.0 + d.1 * d.1
                         };
-                        let max_dist_sq = lines.iter().map(|(x, y)| dist_sq(x, y)).max().unwrap();
+                        let max_dist_sq = lines
+                            .iter()
+                            .map(|(x, y)| dist_sq(&point_to_grid_cell(x), &point_to_grid_cell(y)))
+                            .max()
+                            .unwrap();
                         let chosen_longest_line_idx = lines
                             .iter()
                             .enumerate()
-                            .filter(|(_, (x, y))| dist_sq(x, y) == max_dist_sq)
+                            .filter(|(_, (x, y))| {
+                                dist_sq(&point_to_grid_cell(x), &point_to_grid_cell(y))
+                                    == max_dist_sq
+                            })
                             .max_by_key(|(_, (x, _))| x)
                             .map(|(i, _)| i)
                             .unwrap();
@@ -174,7 +191,7 @@ impl MogPermutationShapeCache {
                         for (i, (start, _)) in lines.iter().enumerate() {
                             shape = &shape
                                 | &Shape::regular_polygon(
-                                    coordinates.cell_to_pos(*start),
+                                    coordinates.cell_to_pos(point_to_grid_cell(start)),
                                     if i == 0 { large_radius } else { small_radius },
                                     12,
                                     0.0,
@@ -185,8 +202,8 @@ impl MogPermutationShapeCache {
                         let (start, end) = lines.pop().unwrap();
                         draw_line(
                             &mut shape,
-                            start,
-                            end,
+                            &start,
+                            &end,
                             line_width,
                             LineCap::Round(0.1),
                             arrowhead_cap(1.5),
@@ -196,8 +213,8 @@ impl MogPermutationShapeCache {
                         for (start, end) in lines {
                             draw_line(
                                 &mut shape,
-                                start,
-                                end,
+                                &start,
+                                &end,
                                 line_width,
                                 LineCap::Round(0.1),
                                 LineCap::Round(0.1),
@@ -205,8 +222,10 @@ impl MogPermutationShapeCache {
                         }
                     }
 
-                    self.cycles_and_shapes
-                        .push((cycle.into_iter().cloned().collect(), shape));
+                    self.cycles_and_shapes.push((
+                        cycle.into_iter().map(|p| point_to_grid_cell(&p)).collect(),
+                        shape,
+                    ));
                 }
             } else {
                 self.cycles_and_shapes = vec![];

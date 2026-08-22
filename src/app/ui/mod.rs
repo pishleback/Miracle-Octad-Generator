@@ -4,17 +4,9 @@ pub mod sextet_labelling;
 pub mod shape;
 
 mod mog {
-    use crate::app::logic::miracle_octad_generator::BinaryGolayCode;
     use algebraeon::rings::finite_fields::quaternary_field::QuaternaryField as F4;
     use eframe::egui::{Color32, Rect};
     use std::collections::HashSet;
-    use std::sync::OnceLock;
-
-    static MOG: OnceLock<BinaryGolayCode> = OnceLock::new();
-
-    pub fn mog() -> &'static BinaryGolayCode {
-        MOG.get_or_init(BinaryGolayCode::default)
-    }
 
     // Draw an F4 element
     pub fn draw_f4(

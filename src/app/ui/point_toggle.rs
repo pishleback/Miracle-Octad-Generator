@@ -1,23 +1,31 @@
-use crate::app::logic::miracle_octad_generator::*;
-use crate::app::logic::permutation::Permutation;
-use crate::app::logic::traits::{Enumerated, Labelled};
 use crate::app::ui::grid::GridCell;
 use crate::app::ui::mog::sextet_idx_to_colour;
-use crate::app::ui::mog_permutation_shapes::MogPermutationShapeCache;
+use crate::app::ui::mog_permutation_shapes::{MogPermutationShapeCache, point_to_grid_cell};
 use crate::app::{
     AppState,
     ui::mog::{draw_f4, row_to_f4},
 };
+use algebraeon::combinatorics::golay_codes::extended_binary_golay_code::{
+    EbgcPointPermutation, LabelledPoints, NearestCodewordsResult, Point, Vector, complete_octad,
+    nearest_ebgc_codeword,
+};
 use algebraeon::rings::finite_fields::quaternary_field::QuaternaryField as F4;
+use algebraeon::rings::num_theory::modulo::const_naive::Modulo;
+use algebraeon::rings::structure::{MetaAdditionSignature, MetaOneSignature, MetaZeroEqSignature};
+use algebraeon::sets::sets::ConstSizePermutation;
+use algebraeon::structures::{MetaCompositionSignature, MetaPermutationsSignature};
+use algebraeon::structures::{MetaCountableSetSignature, MetaIdentitySignature};
+use algebraeon::structures::{MetaGroupSignature, MetaOrderedFiniteSetSignature};
 use eframe::{
     Frame,
     egui::{CentralPanel, Color32, Context, SidePanel},
 };
+type F2 = Modulo<2>;
 
 #[derive(Clone)]
 pub struct State {
-    selected_points: Labelled<Point, bool>,
-    selected_permutation: Permutation<Point>,
+    selected_points: Vector,
+    selected_permutation: ConstSizePermutation<24, Point>,
     permutation_shapes: MogPermutationShapeCache,
     drag_start: Option<Point>, // Set as soon as mouse is pressed
     is_dragging: bool, // Set only once the mouse has moved far enough to be considered dragging
@@ -26,14 +34,14 @@ pub struct State {
 
 impl Default for State {
     fn default() -> Self {
-        Self::new(Labelled::new_constant(false), Permutation::identity())
+        Self::new(Vector::zero(), ConstSizePermutation::identity())
     }
 }
 
 impl State {
     pub fn new(
-        selected_points: Labelled<Point, bool>,
-        selected_permutation: Permutation<Point>,
+        selected_points: Vector,
+        selected_permutation: ConstSizePermutation<24, Point>,
     ) -> Self {
         Self {
             selected_points,
@@ -48,36 +56,34 @@ impl State {
 
 impl AppState for State {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) -> Option<Box<dyn AppState>> {
-        let mut preview_select_points = Labelled::<Point, Option<bool>>::new_constant(None);
-        let mut coloured_highlight_points = Labelled::<Point, Option<Color32>>::new_constant(None);
-
-        let mog = super::mog::mog();
+        let mut preview_select_points = LabelledPoints::<Option<bool>>::new_constant(&None);
+        let mut coloured_highlight_points = LabelledPoints::<Option<Color32>>::new_constant(&None);
 
         if let Some(new_state) = SidePanel::left("left_panel")
             .min_width(200.0)
             .show(ctx, |ui| {
                 // Clear selection
                 if self.selected_points.weight() != 0
-                    || self.selected_permutation != Permutation::identity()
+                    || self.selected_permutation != ConstSizePermutation::identity()
                 {
                     ui.heading("Clear selection");
                     let button = ui.button("Clear");
 
                     if button.hovered() {
                         for p in self.selected_points.points() {
-                            preview_select_points.set(p, Some(false));
+                            preview_select_points.set(&p, Some(false));
                         }
                     }
 
                     if button.clicked() {
-                        self.selected_points.set_all(false);
-                        self.selected_permutation = Permutation::identity();
+                        self.selected_points = Vector::zero();
+                        self.selected_permutation = ConstSizePermutation::identity();
                     }
                 }
 
-                if self.selected_permutation != Permutation::identity() {
+                if self.selected_permutation != ConstSizePermutation::identity() {
                     ui.heading("Permutation");
-                    if mog.is_automorphism(&self.selected_permutation) {
+                    if self.selected_permutation.is_ebgc_automorphism() {
                         ui.label("Automorphism");
                     } else {
                         ui.label("Not Automorphism");
@@ -94,7 +100,7 @@ impl AppState for State {
                 }
 
                 // The nearest codeword(s)
-                let nearest = mog.nearest_codeword(&self.selected_points);
+                let nearest = nearest_ebgc_codeword(&self.selected_points);
                 match nearest {
                     NearestCodewordsResult::Unique { codeword, distance } => {
                         if distance == 0 {
@@ -107,13 +113,16 @@ impl AppState for State {
                             // Preview octad when hovering on button
                             if button.hovered() {
                                 for p in (&self.selected_points + &codeword).points() {
-                                    preview_select_points.set(p, Some(*codeword.get(p)));
+                                    preview_select_points
+                                        .set(&p, Some(!codeword.coords.get(&p).is_zero()));
                                 }
                             }
                             // Complete the selection
                             if button.clicked() {
                                 for p in (&self.selected_points + &codeword).points() {
-                                    self.selected_points.set(p, *codeword.get(p));
+                                    self.selected_points
+                                        .coords
+                                        .set(&p, codeword.coords.get(&p).clone());
                                 }
                             }
                         }
@@ -126,13 +135,16 @@ impl AppState for State {
                             // Preview octad when hovering on button
                             if button.hovered() {
                                 for p in (&self.selected_points + codeword).points() {
-                                    preview_select_points.set(p, Some(*codeword.get(p)));
+                                    preview_select_points
+                                        .set(&p, Some(!codeword.coords.get(&p).is_zero()));
                                 }
                             }
                             // Complete the selection
                             if button.clicked() {
                                 for p in (&self.selected_points + codeword).points() {
-                                    self.selected_points.set(p, *codeword.get(p));
+                                    self.selected_points
+                                        .coords
+                                        .set(&p, codeword.coords.get(&p).clone());
                                 }
                             }
                         }
@@ -154,13 +166,13 @@ The sextet whose foursomes are the differences between these points and the near
                             .map(|codeword| &self.selected_points + codeword)
                             .collect::<Vec<_>>();
                         sextet.sort_unstable();
-                        sextet.reverse();
                         let ordered_sextet = sextet;
 
                         if complete_sextet_button.hovered() {
                             for (i, vector) in ordered_sextet.iter().enumerate() {
                                 for p in vector.points() {
-                                    coloured_highlight_points.set(p, Some(sextet_idx_to_colour(i)));
+                                    coloured_highlight_points
+                                        .set(&p, Some(sextet_idx_to_colour(i)));
                                 }
                             }
                         }
@@ -180,18 +192,18 @@ The sextet whose foursomes are the differences between these points and the near
                     ui.label("The unique octad containing these 5 points");
                     let button = ui.button("Complete");
 
-                    let octad = mog.complete_octad(&self.selected_points).unwrap();
+                    let octad = complete_octad(&self.selected_points);
 
                     // Preview octad when hovering on button
                     if button.hovered() {
                         for p in (&self.selected_points + &octad).points() {
-                            preview_select_points.set(p, Some(true));
+                            preview_select_points.set(&p, Some(true));
                         }
                     }
                     // complete the selection
                     if button.clicked() {
                         for p in octad.points() {
-                            self.selected_points.set(p, true);
+                            self.selected_points.coords.set(&p, F2::one());
                         }
                     }
                 }
@@ -207,10 +219,6 @@ The sextet whose foursomes are the differences between these points and the near
 
         let row_label_to_cell = |r: usize| -> GridCell { (-1, r as isize) };
         let col_label_to_cell = |c: usize| -> GridCell { (c as isize, 4) };
-        let point_to_cell = |p: Point| -> GridCell {
-            let i = p.point_to_usize();
-            (i as isize % 6, i as isize / 6)
-        };
 
         // The rows labelled by F4
         for r in 0usize..4 {
@@ -223,8 +231,8 @@ The sextet whose foursomes are the differences between these points and the near
         }
 
         // The 6x4 MOG grid
-        for p in Point::points() {
-            grid_builder.include_cell(point_to_cell(p));
+        for p in Point::generate_all_elements() {
+            grid_builder.include_cell(point_to_grid_cell(&p));
         }
 
         CentralPanel::default().show(ctx, |ui| {
@@ -241,10 +249,10 @@ The sextet whose foursomes are the differences between these points and the near
                 let mut t = F4::Zero;
                 for r in 0..4 {
                     let i = c + 6 * r;
-                    let p = Point::usize_to_point(i).unwrap();
+                    let p = Point::enumeration_to_element(&i.into()).unwrap();
                     if preview_select_points
-                        .get(p)
-                        .unwrap_or(*self.selected_points.get(p))
+                        .get(&p)
+                        .unwrap_or(!self.selected_points.coords.get(&p).is_zero())
                     {
                         t = t + row_to_f4(r);
                     }
@@ -254,13 +262,13 @@ The sextet whose foursomes are the differences between these points and the near
             }
 
             // The 6x4 MOG grid
-            for p in Point::points() {
-                let rect = grid.cell_to_rect(point_to_cell(p));
+            for p in Point::generate_all_elements() {
+                let rect = grid.cell_to_rect(point_to_grid_cell(&p));
 
                 // Draw square
                 if preview_select_points
-                    .get(p)
-                    .unwrap_or(*self.selected_points.get(p))
+                    .get(&p)
+                    .unwrap_or(!self.selected_points.coords.get(&p).is_zero())
                 {
                     // Selected
                     painter.rect_filled(
@@ -278,7 +286,7 @@ The sextet whose foursomes are the differences between these points and the near
                 }
 
                 // Highlight
-                if preview_select_points.get(p).is_some() || {
+                if preview_select_points.get(&p).is_some() || {
                     if self.is_dragging {
                         // Don't highlight when dragging
                         false
@@ -299,7 +307,7 @@ The sextet whose foursomes are the differences between these points and the near
                 }
 
                 // Coloured highlihgts
-                if let Some(colour) = coloured_highlight_points.get(p) {
+                if let Some(colour) = coloured_highlight_points.get(&p) {
                     painter.rect_stroke(
                         rect,
                         grid.cell_scalar_to_pos_scalar(0.05),
@@ -313,21 +321,21 @@ The sextet whose foursomes are the differences between these points and the near
 
                 // Toggle if clicked
                 if response.clicked() && rect.contains(response.interact_pointer_pos().unwrap()) {
-                    let b = self.selected_points.get_mut(p);
-                    *b = !*b;
+                    let b = self.selected_points.coords.get_mut(&p);
+                    b.add_mut(&F2::one());
                 }
             }
 
             let mut hovered_point = None;
 
-            for p in Point::points() {
-                let rect = grid.cell_to_rect(point_to_cell(p));
+            for p in Point::generate_all_elements() {
+                let rect = grid.cell_to_rect(point_to_grid_cell(&p));
 
                 // Check if the mouse is over this point
                 if let Some(pos) = response.hover_pos()
                     && rect.contains(pos)
                 {
-                    hovered_point = Some(p);
+                    hovered_point = Some(p.clone());
                 }
 
                 // Start dragging
@@ -336,7 +344,7 @@ The sextet whose foursomes are the differences between these points and the near
                     && let Some(pos) = response.interact_pointer_pos()
                     && rect.contains(pos)
                 {
-                    self.drag_start = Some(p);
+                    self.drag_start = Some(p.clone());
                 }
 
                 // Dragging
@@ -345,7 +353,7 @@ The sextet whose foursomes are the differences between these points and the near
                     && let Some(pos) = response.interact_pointer_pos()
                     && rect.contains(pos)
                 {
-                    self.drag_end = Some(p);
+                    self.drag_end = Some(p.clone());
                 }
             }
 
@@ -355,26 +363,30 @@ The sextet whose foursomes are the differences between these points and the near
 
             let mut drag_permutation = self.selected_permutation.clone();
             if self.is_dragging
-                && let Some(start_p) = self.drag_start
-                && let Some(end_p) = self.drag_end
+                && let Some(start_p) = &self.drag_start
+                && let Some(end_p) = &self.drag_end
                 && (response.dragged() || response.drag_stopped())
             {
-                drag_permutation = &Permutation::new_swap(&start_p, &end_p) * &drag_permutation;
+                if start_p != end_p {
+                    drag_permutation = drag_permutation.compose(
+                        &ConstSizePermutation::new_swap(start_p.clone(), end_p.clone()).unwrap(),
+                    )
+                }
             }
 
-            let colour = if mog.is_automorphism(&drag_permutation) {
+            let colour = if drag_permutation.is_ebgc_automorphism() {
                 Color32::GREEN
             } else {
                 Color32::RED
             };
 
             if self.is_dragging
-                && let Some(start_p) = self.drag_start
-                && start_p == self.drag_end.unwrap_or(start_p)
+                && let Some(start_p) = &self.drag_start
+                && start_p == self.drag_end.as_ref().unwrap_or(start_p)
                 && response.is_pointer_button_down_on()
             {
                 painter.circle_filled(
-                    grid.cell_to_pos(point_to_cell(start_p)),
+                    grid.cell_to_pos(point_to_grid_cell(&start_p)),
                     grid.cell_scalar_to_pos_scalar(self.permutation_shapes.small_radius()),
                     colour,
                 );
@@ -390,16 +402,12 @@ The sextet whose foursomes are the differences between these points and the near
                 self.drag_end = None;
             }
 
-            let cell_permutation = drag_permutation
-                .clone()
-                .map_injective_unchecked(point_to_cell);
-
             self.permutation_shapes
-                .set_permutation(Some(cell_permutation), grid);
+                .set_permutation(Some(drag_permutation), grid);
 
             for (cycle, shape) in self.permutation_shapes.shapes() {
-                let colour = if let Some(p) = hovered_point
-                    && cycle.contains(&point_to_cell(p))
+                let colour = if let Some(p) = &hovered_point
+                    && cycle.contains(&point_to_grid_cell(p))
                 {
                     colour
                 } else {
