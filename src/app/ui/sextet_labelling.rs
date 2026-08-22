@@ -1,4 +1,4 @@
-use crate::app::ui::mog_permutation_shapes::{MogPermutationShapeCache, point_to_grid_cell};
+use crate::app::ui::mog_arrow_shapes::{MogPermutationShapeCache, ShapeSource, point_to_grid_cell};
 use crate::app::{
     AppState,
     ui::mog::{draw_f4, f4_selection, sextet_idx_to_colour},
@@ -865,8 +865,9 @@ Configure permutations which preserve the unordered sextet",
 
             let colour = ui.visuals().strong_text_color();
 
-            for (cycle, shape) in self.permutation_shapes.shapes() {
+            for (source, shape) in self.permutation_shapes.sources_and_shapes() {
                 let colour = if let Some(p) = &hovered_point
+                    && let ShapeSource::Cycle(cycle) = source
                     && cycle.contains(&point_to_grid_cell(p))
                 {
                     colour

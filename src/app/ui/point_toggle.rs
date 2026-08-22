@@ -1,6 +1,6 @@
 use crate::app::ui::grid::GridCell;
 use crate::app::ui::mog::sextet_idx_to_colour;
-use crate::app::ui::mog_permutation_shapes::{MogPermutationShapeCache, point_to_grid_cell};
+use crate::app::ui::mog_arrow_shapes::{MogPermutationShapeCache, ShapeSource, point_to_grid_cell};
 use crate::app::{
     AppState,
     ui::mog::{draw_f4, row_to_f4},
@@ -64,6 +64,14 @@ impl AppState for State {
         if let Some(new_state) = SidePanel::left("left_panel")
             .min_width(200.0)
             .show(ctx, |ui| {
+                if ui.button("Permutation Finding").clicked() {
+                    return Some(
+                        Box::new(super::permutation_finder::State::default()) as Box<dyn AppState>
+                    );
+                }
+
+                ui.separator();
+
                 // Clear selection
                 if self.selected_points.weight() != 0
                     || self.selected_permutation != ConstSizePermutation::identity()
@@ -110,7 +118,6 @@ impl AppState for State {
                     nearest_ebgc_codeword(&self.selected_points)
                 };
                 self.nearest = Some((self.selected_points.clone(), nearest.clone()));
-
                 match nearest {
                     NearestCodewordsResult::Unique { codeword, distance } => {
                         if distance == 0 {
@@ -415,8 +422,9 @@ The sextet whose foursomes are the differences between these points and the near
             self.permutation_shapes
                 .set_permutation(Some(drag_permutation), grid);
 
-            for (cycle, shape) in self.permutation_shapes.shapes() {
+            for (source, shape) in self.permutation_shapes.sources_and_shapes() {
                 let colour = if let Some(p) = &hovered_point
+                    && let ShapeSource::Cycle(cycle) = source
                     && cycle.contains(&point_to_grid_cell(p))
                 {
                     colour
