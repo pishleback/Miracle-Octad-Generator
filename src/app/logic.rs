@@ -237,102 +237,9 @@ pub mod traits {
     }
 }
 
-pub mod finite_field_4 {
-    use super::traits::Enumerated;
-    use std::ops::{Add, Mul};
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-    pub enum Point {
-        Zero,
-        One,
-        Alpha,
-        Beta,
-    }
-
-    impl Add<Self> for Point {
-        type Output = Self;
-
-        fn add(self, other: Self) -> Self::Output {
-            match (self, other) {
-                (x, Point::Zero) => x,
-                (Point::Zero, x) => x,
-                (Point::One, Point::One) => Point::Zero,
-                (Point::One, Point::Alpha) => Point::Beta,
-                (Point::One, Point::Beta) => Point::Alpha,
-                (Point::Alpha, Point::One) => Point::Beta,
-                (Point::Alpha, Point::Alpha) => Point::Zero,
-                (Point::Alpha, Point::Beta) => Point::One,
-                (Point::Beta, Point::One) => Point::Alpha,
-                (Point::Beta, Point::Alpha) => Point::One,
-                (Point::Beta, Point::Beta) => Point::Zero,
-            }
-        }
-    }
-
-    impl Mul<Self> for Point {
-        type Output = Self;
-
-        fn mul(self, other: Self) -> Self::Output {
-            match (self, other) {
-                (_, Point::Zero) => Point::Zero,
-                (Point::Zero, _) => Point::Zero,
-                (x, Point::One) => x,
-                (Point::One, x) => x,
-                (Point::Alpha, Point::Alpha) => Point::Beta,
-                (Point::Alpha, Point::Beta) => Point::One,
-                (Point::Beta, Point::Alpha) => Point::One,
-                (Point::Beta, Point::Beta) => Point::Alpha,
-            }
-        }
-    }
-
-    impl Point {
-        pub fn conjugate(self) -> Self {
-            match self {
-                Point::Zero => Point::Zero,
-                Point::One => Point::One,
-                Point::Alpha => Point::Beta,
-                Point::Beta => Point::Alpha,
-            }
-        }
-
-        pub fn inverse(self) -> Option<Self> {
-            match self {
-                Point::Zero => None,
-                Point::One => Some(Point::One),
-                Point::Alpha => Some(Point::Beta),
-                Point::Beta => Some(Point::Alpha),
-            }
-        }
-    }
-
-    impl Enumerated for Point {
-        const N: usize = 4;
-
-        fn usize_to_point(i: usize) -> Result<Self, ()> {
-            match i {
-                0 => Ok(Self::Zero),
-                1 => Ok(Self::One),
-                2 => Ok(Self::Alpha),
-                3 => Ok(Self::Beta),
-                _ => Err(()),
-            }
-        }
-
-        fn point_to_usize(&self) -> usize {
-            match self {
-                Point::Zero => 0,
-                Point::One => 1,
-                Point::Alpha => 2,
-                Point::Beta => 3,
-            }
-        }
-    }
-}
-
 pub mod hexacode {
-    use super::finite_field_4::Point as F4Point;
     use super::traits::{Enumerated, Labelled};
+    use algebraeon::rings::finite_fields::quaternary_field::QuaternaryField as F4;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub enum Side {
@@ -427,21 +334,27 @@ pub mod hexacode {
         }
     }
 
-    pub type Vector = Labelled<Point, F4Point>;
+    pub type Vector = Labelled<Point, F4>;
 
     impl Vector {
-        fn component(&self, p: Point) -> F4Point {
+        fn component(&self, p: Point) -> F4 {
             *self.get(p)
         }
     }
 }
 
 pub mod miracle_octad_generator {
-    use super::finite_field_4::Point as F4Point;
     use super::{
         hexacode,
         permutation::Permutation,
         traits::{Enumerated, Labelled},
+    };
+    use algebraeon::{
+        rings::{
+            finite_fields::quaternary_field::QuaternaryField as F4,
+            structure::MetaTryReciprocalSignature,
+        },
+        structures::MetaOrderedFiniteSetSignature,
     };
     use std::{
         collections::HashSet,
@@ -452,7 +365,7 @@ pub mod miracle_octad_generator {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct Point {
         pub col: hexacode::Point,
-        pub row: F4Point,
+        pub row: F4,
     }
 
     impl Enumerated for Point {
@@ -470,7 +383,7 @@ pub mod miracle_octad_generator {
             if i < 24 {
                 Ok(Self {
                     col: hexacode::Point::usize_to_point(i % 6).unwrap(),
-                    row: F4Point::usize_to_point(i / 6).unwrap(),
+                    row: F4::enumeration_to_element(&(i / 6).into()).unwrap(),
                 })
             } else {
                 Err(())
@@ -478,7 +391,8 @@ pub mod miracle_octad_generator {
         }
 
         fn point_to_usize(&self) -> usize {
-            self.col.point_to_usize() + 6 * self.row.point_to_usize()
+            let r: usize = self.row.element_to_enumeration().try_into().unwrap();
+            self.col.point_to_usize() + 6 * r
         }
     }
 
@@ -517,7 +431,11 @@ pub mod miracle_octad_generator {
     impl Ord for Vector {
         fn cmp(&self, other: &Self) -> std::cmp::Ordering {
             let points = hexacode::Point::points()
-                .flat_map(|col| F4Point::points().map(move |row| Point { col, row }))
+                .flat_map(|col| {
+                    F4::list_all_elements_ordered()
+                        .into_iter()
+                        .map(move |row| Point { col, row })
+                })
                 .collect::<Vec<_>>();
             points
                 .iter()
@@ -616,11 +534,11 @@ pub mod miracle_octad_generator {
     #[derive(Debug, Clone)]
     pub struct OrderedSextetLabelling {
         sextet: OrderedSextet,
-        labels: Labelled<Point, F4Point>,
+        labels: Labelled<Point, F4>,
     }
 
     impl OrderedSextetLabelling {
-        pub fn labels(&self) -> &Labelled<Point, F4Point> {
+        pub fn labels(&self) -> &Labelled<Point, F4> {
             &self.labels
         }
 
@@ -646,13 +564,13 @@ pub mod miracle_octad_generator {
             }
         }
 
-        pub fn scalar_mul(self, lambda: F4Point) -> Self {
-            assert_ne!(lambda, F4Point::Zero);
+        pub fn scalar_mul(self, lambda: F4) -> Self {
+            assert_ne!(lambda, F4::Zero);
             Self {
                 sextet: self.sextet,
                 labels: self.labels.apply_fn(|value| {
-                    // use lambda.inverse() here because we want to permute the points not the labels
-                    *value * lambda.inverse().unwrap()
+                    // use lambda.reciprocal() here because we want to permute the points not the labels
+                    *value * lambda.try_reciprocal().unwrap()
                 }),
             }
         }
@@ -689,50 +607,50 @@ pub mod miracle_octad_generator {
                     }));
                 }
 
-                for val in [F4Point::One, F4Point::Alpha, F4Point::Beta] {
+                for val in [F4::One, F4::Alpha, F4::Beta] {
                     basis.push(Vector::from_fn(|p| match p.col.pair {
                         hexacode::Pair::Left => match p.col.side {
-                            hexacode::Side::Left => p.row != F4Point::Zero,
-                            hexacode::Side::Right => p.row == F4Point::Zero,
+                            hexacode::Side::Left => p.row != F4::Zero,
+                            hexacode::Side::Right => p.row == F4::Zero,
                         },
                         hexacode::Pair::Middle | hexacode::Pair::Right => p.row == val,
                     }))
                 }
 
                 basis.push(Vector::from_fn(|p| match (p.col.side, p.col.pair) {
-                    (hexacode::Side::Left, hexacode::Pair::Left) => p.row != F4Point::Zero,
-                    (hexacode::Side::Right, hexacode::Pair::Left) => p.row == F4Point::One,
-                    (hexacode::Side::Left, hexacode::Pair::Middle) => p.row == F4Point::Zero,
-                    (hexacode::Side::Right, hexacode::Pair::Middle) => p.row == F4Point::One,
-                    (hexacode::Side::Left, hexacode::Pair::Right) => p.row == F4Point::Alpha,
-                    (hexacode::Side::Right, hexacode::Pair::Right) => p.row == F4Point::Beta,
+                    (hexacode::Side::Left, hexacode::Pair::Left) => p.row != F4::Zero,
+                    (hexacode::Side::Right, hexacode::Pair::Left) => p.row == F4::One,
+                    (hexacode::Side::Left, hexacode::Pair::Middle) => p.row == F4::Zero,
+                    (hexacode::Side::Right, hexacode::Pair::Middle) => p.row == F4::One,
+                    (hexacode::Side::Left, hexacode::Pair::Right) => p.row == F4::Alpha,
+                    (hexacode::Side::Right, hexacode::Pair::Right) => p.row == F4::Beta,
                 }));
 
                 basis.push(Vector::from_fn(|p| match (p.col.side, p.col.pair) {
-                    (hexacode::Side::Left, hexacode::Pair::Left) => p.row != F4Point::Zero,
-                    (hexacode::Side::Right, hexacode::Pair::Left) => p.row == F4Point::Alpha,
-                    (hexacode::Side::Left, hexacode::Pair::Middle) => p.row == F4Point::Zero,
-                    (hexacode::Side::Right, hexacode::Pair::Middle) => p.row == F4Point::Alpha,
-                    (hexacode::Side::Left, hexacode::Pair::Right) => p.row == F4Point::Beta,
-                    (hexacode::Side::Right, hexacode::Pair::Right) => p.row == F4Point::One,
+                    (hexacode::Side::Left, hexacode::Pair::Left) => p.row != F4::Zero,
+                    (hexacode::Side::Right, hexacode::Pair::Left) => p.row == F4::Alpha,
+                    (hexacode::Side::Left, hexacode::Pair::Middle) => p.row == F4::Zero,
+                    (hexacode::Side::Right, hexacode::Pair::Middle) => p.row == F4::Alpha,
+                    (hexacode::Side::Left, hexacode::Pair::Right) => p.row == F4::Beta,
+                    (hexacode::Side::Right, hexacode::Pair::Right) => p.row == F4::One,
                 }));
 
                 basis.push(Vector::from_fn(|p| match (p.col.side, p.col.pair) {
-                    (hexacode::Side::Left, hexacode::Pair::Left) => p.row == F4Point::One,
-                    (hexacode::Side::Right, hexacode::Pair::Left) => p.row != F4Point::Zero,
-                    (hexacode::Side::Left, hexacode::Pair::Middle) => p.row == F4Point::Zero,
-                    (hexacode::Side::Right, hexacode::Pair::Middle) => p.row == F4Point::One,
-                    (hexacode::Side::Left, hexacode::Pair::Right) => p.row == F4Point::Beta,
-                    (hexacode::Side::Right, hexacode::Pair::Right) => p.row == F4Point::Alpha,
+                    (hexacode::Side::Left, hexacode::Pair::Left) => p.row == F4::One,
+                    (hexacode::Side::Right, hexacode::Pair::Left) => p.row != F4::Zero,
+                    (hexacode::Side::Left, hexacode::Pair::Middle) => p.row == F4::Zero,
+                    (hexacode::Side::Right, hexacode::Pair::Middle) => p.row == F4::One,
+                    (hexacode::Side::Left, hexacode::Pair::Right) => p.row == F4::Beta,
+                    (hexacode::Side::Right, hexacode::Pair::Right) => p.row == F4::Alpha,
                 }));
 
                 basis.push(Vector::from_fn(|p| match (p.col.side, p.col.pair) {
-                    (hexacode::Side::Left, hexacode::Pair::Left) => p.row == F4Point::Alpha,
-                    (hexacode::Side::Right, hexacode::Pair::Left) => p.row != F4Point::Zero,
-                    (hexacode::Side::Left, hexacode::Pair::Middle) => p.row == F4Point::Zero,
-                    (hexacode::Side::Right, hexacode::Pair::Middle) => p.row == F4Point::Alpha,
-                    (hexacode::Side::Left, hexacode::Pair::Right) => p.row == F4Point::One,
-                    (hexacode::Side::Right, hexacode::Pair::Right) => p.row == F4Point::Beta,
+                    (hexacode::Side::Left, hexacode::Pair::Left) => p.row == F4::Alpha,
+                    (hexacode::Side::Right, hexacode::Pair::Left) => p.row != F4::Zero,
+                    (hexacode::Side::Left, hexacode::Pair::Middle) => p.row == F4::Zero,
+                    (hexacode::Side::Right, hexacode::Pair::Middle) => p.row == F4::Alpha,
+                    (hexacode::Side::Left, hexacode::Pair::Right) => p.row == F4::One,
+                    (hexacode::Side::Right, hexacode::Pair::Right) => p.row == F4::Beta,
                 }));
 
                 basis
@@ -826,7 +744,7 @@ pub mod miracle_octad_generator {
             y: Point,
             z: Point,
             w: Point,
-            alpha: F4Point,
+            alpha: F4,
         ) -> OrderedSextetLabelling {
             // T1 T2  T3 T4  T5 T6
             let t0 = sextet.foursome(hexacode::Point::usize_to_point(0).unwrap());
@@ -842,10 +760,10 @@ pub mod miracle_octad_generator {
             assert!(t1.contains_point(z));
             assert!(t2.contains_point(w));
             assert_ne!(y, z);
-            let mut labels = Labelled::new_constant(F4Point::Zero);
-            debug_assert_eq!(*labels.get(x), F4Point::Zero);
-            debug_assert_eq!(*labels.get(y), F4Point::Zero);
-            labels.set(z, F4Point::One);
+            let mut labels = Labelled::new_constant(F4::Zero);
+            debug_assert_eq!(*labels.get(x), F4::Zero);
+            debug_assert_eq!(*labels.get(y), F4::Zero);
+            labels.set(z, F4::One);
             labels.set(w, alpha);
 
             let _ = t1; //It's not used
@@ -860,10 +778,10 @@ pub mod miracle_octad_generator {
 
             // Complete the hexacodeword (0, 1, alpha, ?, ?, ?) -> (0, 1, alpha, beta, gamma, delta)
             let (beta, gamma, delta) = match alpha {
-                F4Point::Zero => (F4Point::One, F4Point::Alpha, F4Point::Beta),
-                F4Point::One => (F4Point::Zero, F4Point::Beta, F4Point::Alpha),
-                F4Point::Alpha => (F4Point::Beta, F4Point::Zero, F4Point::One),
-                F4Point::Beta => (F4Point::Alpha, F4Point::One, F4Point::Zero),
+                F4::Zero => (F4::One, F4::Alpha, F4::Beta),
+                F4::One => (F4::Zero, F4::Beta, F4::Alpha),
+                F4::Alpha => (F4::Beta, F4::Zero, F4::One),
+                F4::Beta => (F4::Alpha, F4::One, F4::Zero),
             };
             // Use the octad containing (T1 \ {x}) U {z, w} to label 1 point in each of T3, T4, T5, T6
             let octad = self
@@ -908,12 +826,12 @@ pub mod miracle_octad_generator {
             //Find the point labelled 0 in T4 and the three points not labelled 0 in T5
             let mut final_four = vec![];
             for p in t5.points() {
-                if *labels.get(p) != F4Point::Zero {
+                if *labels.get(p) != F4::Zero {
                     final_four.push(p);
                 }
             }
             for p in t4.points() {
-                if *labels.get(p) == F4Point::Zero {
+                if *labels.get(p) == F4::Zero {
                     final_four.push(p);
                 }
             }
@@ -932,9 +850,9 @@ pub mod miracle_octad_generator {
                     }
                 }
             }
-            debug_assert_eq!(*labels.get(x), F4Point::Zero);
-            debug_assert_eq!(*labels.get(y), F4Point::Zero);
-            debug_assert_eq!(*labels.get(z), F4Point::One);
+            debug_assert_eq!(*labels.get(x), F4::Zero);
+            debug_assert_eq!(*labels.get(y), F4::Zero);
+            debug_assert_eq!(*labels.get(z), F4::One);
             debug_assert_eq!(*labels.get(w2), alpha);
             debug_assert_eq!(*labels.get(w3), beta);
             debug_assert_eq!(*labels.get(w4), gamma);
@@ -949,10 +867,10 @@ pub mod miracle_octad_generator {
                     let mut beta_count: usize = 0;
                     for p in t.points() {
                         match labels.get(p) {
-                            F4Point::Zero => zero_count += 1,
-                            F4Point::One => one_count += 1,
-                            F4Point::Alpha => alpha_count += 1,
-                            F4Point::Beta => beta_count += 1,
+                            F4::Zero => zero_count += 1,
+                            F4::One => one_count += 1,
+                            F4::Alpha => alpha_count += 1,
+                            F4::Beta => beta_count += 1,
                         }
                     }
                     assert_eq!(zero_count, 1);

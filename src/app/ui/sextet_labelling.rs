@@ -6,9 +6,10 @@ use crate::app::ui::mog::mog;
 use crate::app::ui::mog_permutation_shapes::MogPermutationShapeCache;
 use crate::app::{
     AppState,
-    logic::finite_field_4::Point as F4Point,
     ui::mog::{draw_f4, f4_selection, sextet_idx_to_colour},
 };
+use algebraeon::rings::finite_fields::quaternary_field::QuaternaryField as F4;
+use algebraeon::rings::structure::MetaTryReciprocalSignature;
 use eframe::egui::{Button, CentralPanel, Color32, SidePanel};
 use std::collections::HashSet;
 
@@ -19,9 +20,9 @@ enum PartialLabellingState {
         // 3 labels
         // x != y
         // z can be anything
-        x: F4Point,
-        y: F4Point,
-        z: F4Point,
+        x: F4,
+        y: F4,
+        z: F4,
         // This pair is the pair of foursomes with labels x and x,y
         pair: hexacode::Pair,
         // This is the foursome in the pair with just the label x
@@ -61,7 +62,7 @@ use foursome_index::*;
 #[derive(Clone, PartialEq, Eq)]
 struct SextetStabilizer {
     foursome_permutation: Vec<FoursomeIndex>,
-    inner_permutations: Vec<Permutation<F4Point>>,
+    inner_permutations: Vec<Permutation<F4>>,
 }
 
 impl Default for SextetStabilizer {
@@ -100,7 +101,7 @@ pub struct State<PrevState: AppState + Clone + 'static> {
     prev_state: PrevState,
     sextet: Vec<Vector>,
     ordering: Vec<FoursomeIndex>, // A permutation of 0..6
-    labelling: Labelled<Point, Option<F4Point>>,
+    labelling: Labelled<Point, Option<F4>>,
     permutation_shapes: MogPermutationShapeCache,
     selected_permutation_type: PermutationType,
     sextet_stabilizer_permutation: SextetStabilizer,
@@ -163,7 +164,7 @@ impl<PrevState: AppState + Clone> State<PrevState> {
         let sextet: Labelled<hexacode::Point, Vector> =
             Labelled::from_fn(|h: hexacode::Point| self.get_foursome(h).clone());
 
-        let mut used_labels: Labelled<hexacode::Point, HashSet<F4Point>> =
+        let mut used_labels: Labelled<hexacode::Point, HashSet<F4>> =
             Labelled::new_constant(HashSet::new());
 
         for foursome in hexacode::Point::points() {
@@ -317,10 +318,10 @@ impl<PrevState: AppState + Clone> State<PrevState> {
     }
 
     // Given the labels currently set in self.labelling, return a list of allowable labels for each point
-    fn allowed_labels(&self) -> Labelled<Point, HashSet<F4Point>> {
+    fn allowed_labels(&self) -> Labelled<Point, HashSet<F4>> {
         let mut result = Labelled::new_constant(HashSet::new());
         for p in Point::points() {
-            for label in [F4Point::Zero, F4Point::One, F4Point::Alpha, F4Point::Beta] {
+            for label in [F4::Zero, F4::One, F4::Alpha, F4::Beta] {
                 let mut modified_self = self.clone();
                 modified_self.labelling.set(p, Some(label));
                 match modified_self.partial_labelling_state() {
@@ -463,12 +464,12 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                     point2,
                     point3,
                     point4,
-                    z * (x + y).inverse().unwrap(),
+                    z * (x + y).try_reciprocal().unwrap(),
                 );
                 // Apply some more automorphism so that point1 and point2 are labelled x, point3 is labelled y, and point4 is labelled z
 
                 // Multiply by x+y
-                labelling = labelling.scalar_mul((x + y).inverse().unwrap()); // .inverse() here because we want to apply the scalar mul to the labels not to the points
+                labelling = labelling.scalar_mul((x + y).try_reciprocal().unwrap()); // .inverse() here because we want to apply the scalar mul to the labels not to the points
 
                 // Add the hexacodeword xx00xx
                 labelling =
@@ -480,7 +481,7 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                         hexacode::Point {
                             pair: hexacode::Pair::Middle,
                             ..
-                        } => F4Point::Zero,
+                        } => F4::Zero,
                     }));
 
                 debug_assert_eq!(*labelling.labels().get(point1), x);
@@ -627,9 +628,9 @@ Configure permutations which preserve the unordered sextet",
                                     &mut self.sextet_stabilizer_permutation.inner_permutations
                                 {
                                     *foursome_perm = &Permutation::new_cycle(vec![
-                                        &F4Point::One,
-                                        &F4Point::Alpha,
-                                        &F4Point::Beta,
+                                        &F4::One,
+                                        &F4::Alpha,
+                                        &F4::Beta,
                                     ]) * &*foursome_perm;
                                 }
                             }
@@ -637,9 +638,8 @@ Configure permutations which preserve the unordered sextet",
                                 for foursome_perm in
                                     &mut self.sextet_stabilizer_permutation.inner_permutations
                                 {
-                                    *foursome_perm =
-                                        &Permutation::new_swap(&F4Point::Alpha, &F4Point::Beta)
-                                            * &*foursome_perm;
+                                    *foursome_perm = &Permutation::new_swap(&F4::Alpha, &F4::Beta)
+                                        * &*foursome_perm;
                                 }
                             }
                         });
@@ -679,30 +679,30 @@ Configure permutations which preserve the unordered sextet",
 
                                     if ui.button("+1").clicked() {
                                         *foursome_perm =
-                                            &Permutation::new_swap(&F4Point::Zero, &F4Point::One)
+                                            &Permutation::new_swap(&F4::Zero, &F4::One)
                                                 * &*foursome_perm;
                                         *foursome_perm =
-                                            &Permutation::new_swap(&F4Point::Alpha, &F4Point::Beta)
+                                            &Permutation::new_swap(&F4::Alpha, &F4::Beta)
                                                 * &*foursome_perm;
                                     }
                                     if ui.button("+ω").clicked() {
                                         *foursome_perm =
-                                            &Permutation::new_swap(&F4Point::Zero, &F4Point::Alpha)
+                                            &Permutation::new_swap(&F4::Zero, &F4::Alpha)
                                                 * &*foursome_perm;
                                         *foursome_perm =
-                                            &Permutation::new_swap(&F4Point::One, &F4Point::Beta)
+                                            &Permutation::new_swap(&F4::One, &F4::Beta)
                                                 * &*foursome_perm;
                                     }
                                     if ui.button("×ω").clicked() {
                                         *foursome_perm = &Permutation::new_cycle(vec![
-                                            &F4Point::One,
-                                            &F4Point::Alpha,
-                                            &F4Point::Beta,
+                                            &F4::One,
+                                            &F4::Alpha,
+                                            &F4::Beta,
                                         ]) * &*foursome_perm;
                                     }
                                     if ui.button("Conjugate").clicked() {
                                         *foursome_perm =
-                                            &Permutation::new_swap(&F4Point::Alpha, &F4Point::Beta)
+                                            &Permutation::new_swap(&F4::Alpha, &F4::Beta)
                                                 * &*foursome_perm;
                                     }
                                 });

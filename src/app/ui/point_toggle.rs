@@ -1,4 +1,3 @@
-use crate::app::logic::finite_field_4::Point as F4Point;
 use crate::app::logic::miracle_octad_generator::*;
 use crate::app::logic::permutation::Permutation;
 use crate::app::logic::traits::{Enumerated, Labelled};
@@ -9,6 +8,7 @@ use crate::app::{
     AppState,
     ui::mog::{draw_f4, row_to_f4},
 };
+use algebraeon::rings::finite_fields::quaternary_field::QuaternaryField as F4;
 use eframe::{
     Frame,
     egui::{CentralPanel, Color32, Context, SidePanel},
@@ -238,7 +238,7 @@ The sextet whose foursomes are the differences between these points and the near
 
             // The columns labelled by the sum of the F4 values in column
             for c in 0..6 {
-                let mut t = F4Point::Zero;
+                let mut t = F4::Zero;
                 for r in 0..4 {
                     let i = c + 6 * r;
                     let p = Point::usize_to_point(i).unwrap();
