@@ -10,6 +10,7 @@ all-features = true
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [dependencies]
+algebraeon = { version = "0.0.17", path = "../Algebraeon/algebraeon" }
 egui = "0.32"
 eframe = { version = "0.32", default-features = false, features = [
     "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
@@ -34,7 +35,13 @@ env_logger = "0.11.8"
 # web:
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen-futures = "0.4.50"
-web-sys = "0.3.70"              # to access the DOM (to hide the loading text)
+web-sys = "0.3.70" # to access the DOM (to hide the loading text)
+getrandom03 = { package = "getrandom", version = "0.3.3", features = [
+    "wasm_js",
+] }
+getrandom04 = { package = "getrandom", version = "0.4.3", features = [
+    "wasm_js",
+] }
 
 [profile.release]
 opt-level = 2 # fast and small wasm
@@ -42,7 +49,6 @@ opt-level = 2 # fast and small wasm
 # Optimize all dependencies even in debug builds:
 [profile.dev.package."*"]
 opt-level = 2
-
 
 [patch.crates-io]
 
