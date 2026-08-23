@@ -14,9 +14,9 @@ use algebraeon::combinatorics::golay_codes::ordered_syntheme::{
 use algebraeon::rings::finite_fields::quaternary_field::QuaternaryField as F4;
 use algebraeon::rings::structure::MetaTryReciprocalSignature;
 use algebraeon::sets::sets::{ConstSizePermutation, Function};
-use algebraeon::structures::MetaPermutationsSignature;
 use algebraeon::structures::{MetaCompositionSignature, MetaGroupSignature};
 use algebraeon::structures::{MetaCountableSetSignature, MetaFiniteSetPermutationsSignature};
+use algebraeon::structures::{MetaFunctionsSignature, MetaPermutationsSignature};
 use algebraeon::structures::{MetaIdentitySignature, MetaOrderedFiniteSetSignature};
 use eframe::egui::{Button, CentralPanel, Color32, SidePanel};
 use std::collections::HashSet;
@@ -119,6 +119,45 @@ pub struct State<PrevState: AppState + Clone + 'static> {
 }
 
 impl<PrevState: AppState + Clone> State<PrevState> {
+    pub fn from_labelled_ordered_sextet(
+        prev_state: PrevState,
+        ordered_sextet_labelling: OrderedSextetLabelling,
+    ) -> Self {
+        let foursomes = ordered_sextet_labelling.foursomes();
+        let mut sextet: [_; 6] = std::array::from_fn(|i| {
+            (
+                i,
+                foursomes
+                    .image(&OrderedSynthemePoint::enumeration_to_element(&i.into()).unwrap())
+                    .clone(),
+            )
+        });
+        sextet.sort_by_key(|(_, v)| v.clone());
+        let mut labelling = LabelledPoints::new_constant(&None);
+        let perm = ordered_sextet_labelling.to_permutation_to_standard_labelling();
+        let p = |i: usize| -> Point { Point::enumeration_to_element(&i.into()).unwrap() };
+        for pt in [p(0), p(1), p(2), p(7)] {
+            *labelling.image_mut(&perm.preimage(&pt)) = Some(
+                *ordered_sextet_labelling
+                    .f4_labels()
+                    .image(&perm.preimage(&pt)),
+            );
+        }
+        let ordering_inv: [_; 6] = std::array::from_fn(|i| sextet[i].0);
+        Self {
+            prev_state,
+            sextet: sextet.map(|(_, v)| v),
+            ordering: (0..6)
+                .map(|i| FoursomeIndex::new(ordering_inv.iter().position(|j| j == &i).unwrap()))
+                .into_iter()
+                .collect(),
+            labelling,
+            permutation_shapes: MogPermutationShapeCache::default(),
+            selected_permutation_type: PermutationType::default(),
+            sextet_stabilizer_permutation: SextetStabilizer::default(),
+        }
+    }
+
     pub fn from_foursome(prev_state: PrevState, vector: &Vector) -> Self {
         let mut sextet = complete_sextet(vector.clone()).foursomes();
         sextet.sort_unstable();

@@ -1,13 +1,14 @@
 use crate::app::ui::grid::GridCell;
 use crate::app::ui::mog::sextet_idx_to_colour;
 use crate::app::ui::mog_arrow_shapes::{MogPermutationShapeCache, ShapeSource, point_to_grid_cell};
+use crate::app::ui::sextet_labelling;
 use crate::app::{
     AppState,
     ui::mog::{draw_f4, row_to_f4},
 };
 use algebraeon::combinatorics::golay_codes::extended_binary_golay_code::{
-    EbgcPointPermutation, LabelledPoints, NearestCodewordsResult, Point, Vector, complete_octad,
-    nearest_ebgc_codeword,
+    EbgcPointPermutation, LabelledPoints, NearestCodewordsResult, OrderedSextetLabelling, Point,
+    Vector, complete_octad, nearest_ebgc_codeword,
 };
 use algebraeon::rings::finite_fields::quaternary_field::QuaternaryField as F4;
 use algebraeon::rings::num_theory::modulo::const_naive::Modulo;
@@ -95,6 +96,16 @@ impl AppState for State {
                     ui.heading("Permutation");
                     if self.selected_permutation.is_ebgc_automorphism() {
                         ui.label("It's an automorphism");
+                        if ui.button("Sextet Labelling").clicked() {
+                            return Some(Box::new(
+                                sextet_labelling::State::from_labelled_ordered_sextet(
+                                    self.clone(),
+                                    OrderedSextetLabelling::from_permutation_to_standard_labelling(
+                                        &self.selected_permutation.inverse(),
+                                    ),
+                                ),
+                            ));
+                        }
                     } else {
                         ui.label("It's not an automorphism");
                     }
