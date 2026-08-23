@@ -64,7 +64,7 @@ impl AppState for State {
         if let Some(new_state) = SidePanel::left("left_panel")
             .min_width(200.0)
             .show(ctx, |ui| {
-                if ui.button("Permutation Finding").clicked() {
+                if ui.button("Permutations").clicked() {
                     return Some(
                         Box::new(super::permutation_finder::State::default()) as Box<dyn AppState>
                     );
@@ -94,9 +94,9 @@ impl AppState for State {
                 if self.selected_permutation != ConstSizePermutation::identity() {
                     ui.heading("Permutation");
                     if self.selected_permutation.is_ebgc_automorphism() {
-                        ui.label("Automorphism");
+                        ui.label("It's an automorphism");
                     } else {
-                        ui.label("Not Automorphism");
+                        ui.label("It's not an automorphism");
                     }
 
                     if ui.button("Invert").clicked() {

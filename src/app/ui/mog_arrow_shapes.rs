@@ -250,14 +250,24 @@ impl MogPermutationShapeCache {
                         for (start, end) in arrows {
                             let mut shape = Shape::empty();
 
-                            draw_line(
-                                &mut shape,
-                                &start,
-                                &end,
-                                line_width,
-                                LineCap::Round(0.1),
-                                arrowhead_cap(1.5),
-                            );
+                            if start == end {
+                                shape = &shape
+                                    | &Shape::regular_polygon(
+                                        coordinates.cell_to_pos(point_to_grid_cell(start)),
+                                        large_radius,
+                                        12,
+                                        0.0,
+                                    );
+                            } else {
+                                draw_line(
+                                    &mut shape,
+                                    &start,
+                                    &end,
+                                    line_width,
+                                    LineCap::Round(0.1),
+                                    arrowhead_cap(1.5),
+                                );
+                            }
 
                             self.sources_and_shapes.push((
                                 ShapeSource::Arrow(
