@@ -144,6 +144,7 @@ dependencies = [
 [[package]]
 name = "algebraeon"
 version = "0.0.17"
+source = "git+https://github.com/pishleback/Algebraeon.git?rev=42ac1547826606cf625bacbe8fc371d720bbb6f1#42ac1547826606cf625bacbe8fc371d720bbb6f1"
 dependencies = [
  "algebraeon-combinatorics",
  "algebraeon-drawing",
@@ -158,6 +159,7 @@ dependencies = [
 [[package]]
 name = "algebraeon-combinatorics"
 version = "0.0.17"
+source = "git+https://github.com/pishleback/Algebraeon.git?rev=42ac1547826606cf625bacbe8fc371d720bbb6f1#42ac1547826606cf625bacbe8fc371d720bbb6f1"
 dependencies = [
  "algebraeon-groups",
  "algebraeon-macros",
@@ -174,6 +176,7 @@ dependencies = [
 [[package]]
 name = "algebraeon-drawing"
 version = "0.0.17"
+source = "git+https://github.com/pishleback/Algebraeon.git?rev=42ac1547826606cf625bacbe8fc371d720bbb6f1#42ac1547826606cf625bacbe8fc371d720bbb6f1"
 dependencies = [
  "algebraeon-geometry",
  "algebraeon-rings",
@@ -191,6 +194,7 @@ dependencies = [
 [[package]]
 name = "algebraeon-geometry"
 version = "0.0.17"
+source = "git+https://github.com/pishleback/Algebraeon.git?rev=42ac1547826606cf625bacbe8fc371d720bbb6f1#42ac1547826606cf625bacbe8fc371d720bbb6f1"
 dependencies = [
  "algebraeon-rings",
  "algebraeon-sets",
@@ -204,6 +208,7 @@ dependencies = [
 [[package]]
 name = "algebraeon-groups"
 version = "0.0.17"
+source = "git+https://github.com/pishleback/Algebraeon.git?rev=42ac1547826606cf625bacbe8fc371d720bbb6f1#42ac1547826606cf625bacbe8fc371d720bbb6f1"
 dependencies = [
  "algebraeon-macros",
  "algebraeon-sets",
@@ -215,6 +220,7 @@ dependencies = [
 [[package]]
 name = "algebraeon-macros"
 version = "0.0.17"
+source = "git+https://github.com/pishleback/Algebraeon.git?rev=42ac1547826606cf625bacbe8fc371d720bbb6f1#42ac1547826606cf625bacbe8fc371d720bbb6f1"
 dependencies = [
  "malachite-base",
  "proc-macro2",
@@ -225,6 +231,7 @@ dependencies = [
 [[package]]
 name = "algebraeon-rings"
 version = "0.0.17"
+source = "git+https://github.com/pishleback/Algebraeon.git?rev=42ac1547826606cf625bacbe8fc371d720bbb6f1#42ac1547826606cf625bacbe8fc371d720bbb6f1"
 dependencies = [
  "algebraeon-groups",
  "algebraeon-macros",
@@ -243,6 +250,7 @@ dependencies = [
 [[package]]
 name = "algebraeon-sets"
 version = "0.0.17"
+source = "git+https://github.com/pishleback/Algebraeon.git?rev=42ac1547826606cf625bacbe8fc371d720bbb6f1#42ac1547826606cf625bacbe8fc371d720bbb6f1"
 dependencies = [
  "algebraeon-macros",
  "algebraeon-structures",
@@ -256,6 +264,7 @@ dependencies = [
 [[package]]
 name = "algebraeon-structures"
 version = "0.0.17"
+source = "git+https://github.com/pishleback/Algebraeon.git?rev=42ac1547826606cf625bacbe8fc371d720bbb6f1#42ac1547826606cf625bacbe8fc371d720bbb6f1"
 dependencies = [
  "algebraeon-macros",
  "malachite",
