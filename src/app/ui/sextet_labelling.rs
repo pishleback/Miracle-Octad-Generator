@@ -1,14 +1,23 @@
-use crate::app::logic::permutation::Permutation;
-use crate::app::logic::traits::{Enumerated, Labelled};
-use crate::app::logic::{hexacode, miracle_octad_generator::*};
-use crate::app::ui::grid::GridCell;
-use crate::app::ui::mog::mog;
-use crate::app::ui::mog_permutation_shapes::MogPermutationShapeCache;
+use crate::app::ui::mog_arrow_shapes::{MogPermutationShapeCache, ShapeSource, point_to_grid_cell};
 use crate::app::{
     AppState,
-    logic::finite_field_4::Point as F4Point,
     ui::mog::{draw_f4, f4_selection, sextet_idx_to_colour},
 };
+use algebraeon::combinatorics::golay_codes::extended_binary_golay_code::{
+    EbgcPointPermutation, LabelledPoints, OrderedSextet, OrderedSextetLabelling, Point, Vector,
+    complete_sextet, complete_sextet_labelling,
+};
+use algebraeon::combinatorics::golay_codes::hexacode::{self, HexacodeVector};
+use algebraeon::combinatorics::golay_codes::ordered_syntheme::{
+    OrderedSynthemePair, OrderedSynthemePoint, OrderedSynthemeSide,
+};
+use algebraeon::rings::finite_fields::quaternary_field::QuaternaryField as F4;
+use algebraeon::rings::structure::MetaTryReciprocalSignature;
+use algebraeon::sets::sets::{ConstSizePermutation, Function};
+use algebraeon::structures::{MetaCompositionSignature, MetaGroupSignature};
+use algebraeon::structures::{MetaCountableSetSignature, MetaFiniteSetPermutationsSignature};
+use algebraeon::structures::{MetaFunctionsSignature, MetaPermutationsSignature};
+use algebraeon::structures::{MetaIdentitySignature, MetaOrderedFiniteSetSignature};
 use eframe::egui::{Button, CentralPanel, Color32, SidePanel};
 use std::collections::HashSet;
 
@@ -19,16 +28,16 @@ enum PartialLabellingState {
         // 3 labels
         // x != y
         // z can be anything
-        x: F4Point,
-        y: F4Point,
-        z: F4Point,
+        x: F4,
+        y: F4,
+        z: F4,
         // This pair is the pair of foursomes with labels x and x,y
-        pair: hexacode::Pair,
+        pair: OrderedSynthemePair,
         // This is the foursome in the pair with just the label x
         // The other is the foursomes in the pair with the labels x and y
-        side: hexacode::Side,
+        side: OrderedSynthemeSide,
         // This is the other foursome with label z
-        third: hexacode::Point,
+        third: OrderedSynthemePoint,
     },
     Overset,
 }
@@ -61,28 +70,31 @@ use foursome_index::*;
 #[derive(Clone, PartialEq, Eq)]
 struct SextetStabilizer {
     foursome_permutation: Vec<FoursomeIndex>,
-    inner_permutations: Vec<Permutation<F4Point>>,
+    inner_permutations: Vec<ConstSizePermutation<4, F4>>,
 }
 
 impl Default for SextetStabilizer {
     fn default() -> Self {
         Self {
             foursome_permutation: (0..6).map(FoursomeIndex::new).collect(),
-            inner_permutations: (0..6).map(|_| Permutation::identity()).collect(),
+            inner_permutations: (0..6).map(|_| ConstSizePermutation::identity()).collect(),
         }
     }
 }
 
 impl SextetStabilizer {
-    pub fn standard_ordered_sextet_permutation(&self) -> Permutation<Point> {
-        Permutation::from_fn(|point: Point| {
-            let col_idx = point.col.point_to_usize();
+    pub fn standard_ordered_sextet_permutation(&self) -> ConstSizePermutation<24, Point> {
+        ConstSizePermutation::new_fn(|point: &Point| {
+            let col_idx: usize = point.col.element_to_enumeration().try_into().unwrap();
             Point {
-                col: hexacode::Point::usize_to_point(self.foursome_permutation[col_idx].index())
-                    .unwrap(),
-                row: *self.inner_permutations[col_idx].apply(&point.row),
+                col: OrderedSynthemePoint::enumeration_to_element(
+                    &self.foursome_permutation[col_idx].index().into(),
+                )
+                .unwrap(),
+                row: self.inner_permutations[col_idx].image(&point.row),
             }
         })
+        .unwrap()
     }
 }
 
@@ -98,41 +110,75 @@ enum PermutationType {
 #[derive(Clone)]
 pub struct State<PrevState: AppState + Clone + 'static> {
     prev_state: PrevState,
-    sextet: Vec<Vector>,
+    sextet: [Vector; 6],
     ordering: Vec<FoursomeIndex>, // A permutation of 0..6
-    labelling: Labelled<Point, Option<F4Point>>,
+    labelling: LabelledPoints<Option<F4>>,
     permutation_shapes: MogPermutationShapeCache,
     selected_permutation_type: PermutationType,
     sextet_stabilizer_permutation: SextetStabilizer,
 }
 
 impl<PrevState: AppState + Clone> State<PrevState> {
-    pub fn from_foursome(prev_state: PrevState, vector: &Vector) -> Self {
-        let mog = super::mog::mog();
-        let mut sextet = mog
-            .complete_sextet(vector)
-            .unwrap()
-            .into_iter()
-            .collect::<Vec<_>>();
-        sextet.sort_unstable();
-        sextet.reverse();
+    pub fn from_labelled_ordered_sextet(
+        prev_state: PrevState,
+        ordered_sextet_labelling: OrderedSextetLabelling,
+    ) -> Self {
+        let foursomes = ordered_sextet_labelling.foursomes();
+        let mut sextet: [_; 6] = std::array::from_fn(|i| {
+            (
+                i,
+                foursomes
+                    .image(&OrderedSynthemePoint::enumeration_to_element(&i.into()).unwrap())
+                    .clone(),
+            )
+        });
+        sextet.sort_by_key(|(_, v)| v.clone());
+        let mut labelling = LabelledPoints::new_constant(&None);
+        let perm = ordered_sextet_labelling.to_permutation_to_standard_labelling();
+        let p = |i: usize| -> Point { Point::enumeration_to_element(&i.into()).unwrap() };
+        for pt in [p(0), p(1), p(2), p(7)] {
+            *labelling.image_mut(&perm.preimage(&pt)) = Some(
+                *ordered_sextet_labelling
+                    .f4_labels()
+                    .image(&perm.preimage(&pt)),
+            );
+        }
+        let ordering_inv: [_; 6] = std::array::from_fn(|i| sextet[i].0);
         Self {
             prev_state,
-            sextet,
-            ordering: (0..6).map(FoursomeIndex::new).collect(),
-            labelling: Labelled::new_constant(None),
+            sextet: sextet.map(|(_, v)| v),
+            ordering: (0..6)
+                .map(|i| FoursomeIndex::new(ordering_inv.iter().position(|j| j == &i).unwrap()))
+                .into_iter()
+                .collect(),
+            labelling,
             permutation_shapes: MogPermutationShapeCache::default(),
             selected_permutation_type: PermutationType::default(),
             sextet_stabilizer_permutation: SextetStabilizer::default(),
         }
     }
 
-    fn get_foursome(&self, foursome: hexacode::Point) -> &Vector {
-        &self.sextet[self.ordering[foursome.point_to_usize()].index()]
+    pub fn from_foursome(prev_state: PrevState, vector: &Vector) -> Self {
+        let mut sextet = complete_sextet(vector.clone()).foursomes();
+        sextet.sort_unstable();
+        Self {
+            prev_state,
+            sextet,
+            ordering: (0..6).map(FoursomeIndex::new).collect(),
+            labelling: LabelledPoints::new_constant(&None),
+            permutation_shapes: MogPermutationShapeCache::default(),
+            selected_permutation_type: PermutationType::default(),
+            sextet_stabilizer_permutation: SextetStabilizer::default(),
+        }
+    }
+
+    fn get_foursome(&self, foursome: OrderedSynthemePoint) -> &Vector {
+        let i: usize = foursome.element_to_enumeration().try_into().unwrap();
+        &self.sextet[self.ordering[i].index()]
     }
 
     pub fn ordered_sextet(&self) -> OrderedSextet {
-        OrderedSextet::from_foursomes(Labelled::from_fn(|h| self.get_foursome(h).clone()))
+        OrderedSextet::from_foursomes(Function::new(|h| self.get_foursome(h).clone()))
     }
 
     /*
@@ -160,16 +206,16 @@ impl<PrevState: AppState + Clone> State<PrevState> {
     which, by standard theory, extends to a unique labelling.
      */
     fn partial_labelling_state(&self) -> PartialLabellingState {
-        let sextet: Labelled<hexacode::Point, Vector> =
-            Labelled::from_fn(|h: hexacode::Point| self.get_foursome(h).clone());
+        let sextet: hexacode::LabelledPoints<Vector> =
+            hexacode::LabelledPoints::new(|h: OrderedSynthemePoint| self.get_foursome(h).clone());
 
-        let mut used_labels: Labelled<hexacode::Point, HashSet<F4Point>> =
-            Labelled::new_constant(HashSet::new());
+        let mut used_labels: hexacode::LabelledPoints<HashSet<F4>> =
+            hexacode::LabelledPoints::new_constant(&HashSet::new());
 
-        for foursome in hexacode::Point::points() {
-            for p in sextet.get(foursome).points() {
-                if let Some(label) = *self.labelling.get(p)
-                    && !used_labels.get_mut(foursome).insert(label)
+        for foursome in OrderedSynthemePoint::generate_all_elements() {
+            for p in sextet.get(&foursome).points() {
+                if let Some(label) = *self.labelling.get(&p)
+                    && !used_labels.get_mut(&foursome).insert(label)
                 {
                     // No duplicate labels per foursome
                     return PartialLabellingState::Overset;
@@ -198,8 +244,8 @@ impl<PrevState: AppState + Clone> State<PrevState> {
             .iter()
             .find_map(|(h, labels)| if labels.len() == 2 { Some(h) } else { None })
         {
-            for foursome in hexacode::Point::points() {
-                if foursome != two_labels_foursome && used_labels.get(foursome).len() >= 2 {
+            for foursome in OrderedSynthemePoint::generate_all_elements() {
+                if foursome != two_labels_foursome && used_labels.get(&foursome).len() >= 2 {
                     // At most one foursome with >= 2 labels
                     return PartialLabellingState::Overset;
                 }
@@ -216,9 +262,9 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                     .unwrap();
 
                 if one_label_foursome.pair == two_labels_foursome.pair {
-                    let one_label = used_labels.get(one_label_foursome).iter().next().unwrap();
+                    let one_label = used_labels.get(&one_label_foursome).iter().next().unwrap();
                     if !used_labels
-                        .get(two_labels_foursome)
+                        .get(&two_labels_foursome)
                         .iter()
                         .any(|two_label| one_label == two_label)
                     {
@@ -252,12 +298,12 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                         .unwrap();
 
                     let one_label_adjacent = used_labels
-                        .get(one_label_adjacent_foursome)
+                        .get(&one_label_adjacent_foursome)
                         .iter()
                         .next()
                         .unwrap();
                     if !used_labels
-                        .get(two_labels_foursome)
+                        .get(&two_labels_foursome)
                         .iter()
                         .any(|two_label| one_label_adjacent == two_label)
                     {
@@ -266,14 +312,14 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                     }
 
                     let one_label_nonadjacent = used_labels
-                        .get(one_label_nonadjacent_foursome)
+                        .get(&one_label_nonadjacent_foursome)
                         .iter()
                         .next()
                         .unwrap();
 
                     let x = *one_label_adjacent;
                     let y = *used_labels
-                        .get(two_labels_foursome)
+                        .get(&two_labels_foursome)
                         .iter()
                         .find(|two_label| **two_label != x)
                         .unwrap();
@@ -317,15 +363,15 @@ impl<PrevState: AppState + Clone> State<PrevState> {
     }
 
     // Given the labels currently set in self.labelling, return a list of allowable labels for each point
-    fn allowed_labels(&self) -> Labelled<Point, HashSet<F4Point>> {
-        let mut result = Labelled::new_constant(HashSet::new());
-        for p in Point::points() {
-            for label in [F4Point::Zero, F4Point::One, F4Point::Alpha, F4Point::Beta] {
+    fn allowed_labels(&self) -> LabelledPoints<HashSet<F4>> {
+        let mut result = LabelledPoints::new_constant(&HashSet::new());
+        for p in Point::generate_all_elements() {
+            for label in [F4::Zero, F4::One, F4::Alpha, F4::Beta] {
                 let mut modified_self = self.clone();
-                modified_self.labelling.set(p, Some(label));
+                modified_self.labelling.set(&p, Some(label));
                 match modified_self.partial_labelling_state() {
                     PartialLabellingState::Underset | PartialLabellingState::Perfect { .. } => {
-                        result.get_mut(p).insert(label);
+                        result.get_mut(&p).insert(label);
                     }
                     PartialLabellingState::Overset => {}
                 }
@@ -346,14 +392,14 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                 side,
                 third,
             } => {
-                let empty_pair = hexacode::Pair::points()
+                let empty_pair = OrderedSynthemePair::generate_all_elements()
                     .find(|p| *p != pair && *p != third.pair)
                     .unwrap();
 
                 let mut ordered_sextet = self.ordered_sextet();
 
-                let h1 = hexacode::Point { side, pair };
-                let h23 = hexacode::Point {
+                let h1 = OrderedSynthemePoint { side, pair };
+                let h23 = OrderedSynthemePoint {
                     side: side.flip(),
                     pair,
                 };
@@ -364,68 +410,75 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                 let foursome4 = self.get_foursome(h4);
                 let point1 = foursome1
                     .points()
-                    .find(|p| *self.labelling.get(*p) == Some(x))
+                    .find(|p| *self.labelling.get(p) == Some(x))
                     .unwrap();
                 let point2 = foursome23
                     .points()
-                    .find(|p| *self.labelling.get(*p) == Some(x))
+                    .find(|p| *self.labelling.get(p) == Some(x))
                     .unwrap();
                 let point3 = foursome23
                     .points()
-                    .find(|p| *self.labelling.get(*p) == Some(y))
+                    .find(|p| *self.labelling.get(p) == Some(y))
                     .unwrap();
                 let point4 = foursome4
                     .points()
-                    .find(|p| *self.labelling.get(*p) == Some(z))
+                    .find(|p| *self.labelling.get(p) == Some(z))
                     .unwrap();
 
                 let mut foursome_perms = vec![];
 
                 // Apply an automorphism such that foursome1 is left and foursome23 is right in their pair
-                if side == hexacode::Side::Right {
+                if side == OrderedSynthemeSide::Right {
                     for p in [pair, empty_pair] {
-                        foursome_perms.push(Permutation::new_swap(
-                            &hexacode::Point {
-                                side: hexacode::Side::Left,
-                                pair: p,
-                            },
-                            &hexacode::Point {
-                                side: hexacode::Side::Right,
-                                pair: p,
-                            },
-                        ));
+                        foursome_perms.push(
+                            ConstSizePermutation::new_swap(
+                                OrderedSynthemePoint {
+                                    side: OrderedSynthemeSide::Left,
+                                    pair: p,
+                                },
+                                OrderedSynthemePoint {
+                                    side: OrderedSynthemeSide::Right,
+                                    pair: p,
+                                },
+                            )
+                            .unwrap(),
+                        );
                     }
                 }
 
                 // Apply an automorphism such that foursome4 is the lefthand foursome in its pair
-                if h4.side == hexacode::Side::Right {
+                if h4.side == OrderedSynthemeSide::Right {
                     for p in [h4.pair, empty_pair] {
-                        foursome_perms.push(Permutation::new_swap(
-                            &hexacode::Point {
-                                side: hexacode::Side::Left,
-                                pair: p,
-                            },
-                            &hexacode::Point {
-                                side: hexacode::Side::Right,
-                                pair: p,
-                            },
-                        ));
+                        foursome_perms.push(
+                            ConstSizePermutation::new_swap(
+                                OrderedSynthemePoint {
+                                    side: OrderedSynthemeSide::Left,
+                                    pair: p,
+                                },
+                                OrderedSynthemePoint {
+                                    side: OrderedSynthemeSide::Right,
+                                    pair: p,
+                                },
+                            )
+                            .unwrap(),
+                        );
                     }
                 }
 
                 // Apply an automorphism such that foursome1 is the first foursome, foursome23 is the second foursome, and foursome4 is the third foursome
                 foursome_perms.push(
-                    Permutation::from_fn(|h: hexacode::Point| match h.pair {
-                        hexacode::Pair::Left => hexacode::Point { side: h.side, pair },
-                        hexacode::Pair::Middle => hexacode::Point {
+                    ConstSizePermutation::new_fn(|h: &OrderedSynthemePoint| match h.pair {
+                        OrderedSynthemePair::Left => OrderedSynthemePoint { side: h.side, pair },
+                        OrderedSynthemePair::Middle => OrderedSynthemePoint {
                             side: h.side,
                             pair: h4.pair,
                         },
-                        hexacode::Pair::Right => hexacode::Point {
+                        OrderedSynthemePair::Right => OrderedSynthemePoint {
                             side: h.side,
                             pair: empty_pair,
                         },
                     })
+                    .unwrap()
                     .inverse(),
                 );
 
@@ -434,59 +487,58 @@ impl<PrevState: AppState + Clone> State<PrevState> {
                 }
 
                 debug_assert_eq!(
-                    ordered_sextet.foursome(hexacode::Point {
-                        side: hexacode::Side::Left,
-                        pair: hexacode::Pair::Left
+                    ordered_sextet.foursomes().get(&OrderedSynthemePoint {
+                        side: OrderedSynthemeSide::Left,
+                        pair: OrderedSynthemePair::Left
                     }),
                     foursome1
                 );
                 debug_assert_eq!(
-                    ordered_sextet.foursome(hexacode::Point {
-                        side: hexacode::Side::Right,
-                        pair: hexacode::Pair::Left
+                    ordered_sextet.foursomes().get(&OrderedSynthemePoint {
+                        side: OrderedSynthemeSide::Right,
+                        pair: OrderedSynthemePair::Left
                     }),
                     foursome23
                 );
                 debug_assert_eq!(
-                    ordered_sextet.foursome(hexacode::Point {
-                        side: hexacode::Side::Left,
-                        pair: hexacode::Pair::Middle
+                    ordered_sextet.foursomes().get(&OrderedSynthemePoint {
+                        side: OrderedSynthemeSide::Left,
+                        pair: OrderedSynthemePair::Middle
                     }),
                     foursome4
                 );
 
-                let mog = crate::app::ui::mog::mog();
                 // This labelling gives point1 and point2 a label of 0, point3 a label of 1, and point4 a label of z/(x+y)
-                let mut labelling = mog.complete_labelling(
-                    ordered_sextet,
-                    point1,
-                    point2,
-                    point3,
-                    point4,
-                    z * (x + y).inverse().unwrap(),
+                let mut labelling = complete_sextet_labelling(
+                    &ordered_sextet,
+                    &point1,
+                    &point2,
+                    &point3,
+                    &point4,
+                    z * (x + y).try_reciprocal().unwrap(),
                 );
                 // Apply some more automorphism so that point1 and point2 are labelled x, point3 is labelled y, and point4 is labelled z
 
                 // Multiply by x+y
-                labelling = labelling.scalar_mul((x + y).inverse().unwrap()); // .inverse() here because we want to apply the scalar mul to the labels not to the points
+                labelling = labelling.scalar_mul((x + y).try_reciprocal().unwrap()); // .inverse() here because we want to apply the scalar mul to the labels not to the points
 
                 // Add the hexacodeword xx00xx
                 labelling =
-                    labelling.add_vector(hexacode::Vector::from_fn(|h: hexacode::Point| match h {
-                        hexacode::Point {
-                            pair: hexacode::Pair::Left | hexacode::Pair::Right,
+                    labelling.add_vector(&HexacodeVector::new(|h: OrderedSynthemePoint| match h {
+                        OrderedSynthemePoint {
+                            pair: OrderedSynthemePair::Left | OrderedSynthemePair::Right,
                             ..
                         } => x,
-                        hexacode::Point {
-                            pair: hexacode::Pair::Middle,
+                        OrderedSynthemePoint {
+                            pair: OrderedSynthemePair::Middle,
                             ..
-                        } => F4Point::Zero,
+                        } => F4::Zero,
                     }));
 
-                debug_assert_eq!(*labelling.labels().get(point1), x);
-                debug_assert_eq!(*labelling.labels().get(point2), x);
-                debug_assert_eq!(*labelling.labels().get(point3), y);
-                debug_assert_eq!(*labelling.labels().get(point4), z);
+                debug_assert_eq!(*labelling.labels().get(&point1), x);
+                debug_assert_eq!(*labelling.labels().get(&point2), x);
+                debug_assert_eq!(*labelling.labels().get(&point3), y);
+                debug_assert_eq!(*labelling.labels().get(&point4), z);
 
                 // Undo the permutation of the foursomes
                 for perm in foursome_perms.into_iter().rev() {
@@ -510,10 +562,12 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
         let mut hovered_point = None;
 
         let permutation = if let Some(completed_labels) = &completed_labels {
-            let standard_labelling_to_completed_labelling = Permutation::from_fn(|p| Point {
-                col: *completed_labels.foursomes().get(p),
-                row: *completed_labels.labels().get(p),
-            });
+            let standard_labelling_to_completed_labelling =
+                ConstSizePermutation::new_fn(|p| Point {
+                    col: *completed_labels.point_foursomes().get(p),
+                    row: *completed_labels.labels().get(p),
+                })
+                .unwrap();
 
             match self.selected_permutation_type {
                 PermutationType::None => None,
@@ -524,11 +578,12 @@ impl<PrevState: AppState + Clone> AppState for State<PrevState> {
                     Some(standard_labelling_to_completed_labelling.inverse())
                 }
                 PermutationType::SextetStabilizer => Some(
-                    &(&standard_labelling_to_completed_labelling
-                        * &self
+                    (&standard_labelling_to_completed_labelling.compose(
+                        &self
                             .sextet_stabilizer_permutation
-                            .standard_ordered_sextet_permutation())
-                        * &standard_labelling_to_completed_labelling.inverse(),
+                            .standard_ordered_sextet_permutation(),
+                    ))
+                        .compose(&standard_labelling_to_completed_labelling.inverse()),
                 ),
             }
         } else {
@@ -626,20 +681,24 @@ Configure permutations which preserve the unordered sextet",
                                 for foursome_perm in
                                     &mut self.sextet_stabilizer_permutation.inner_permutations
                                 {
-                                    *foursome_perm = &Permutation::new_cycle(vec![
-                                        &F4Point::One,
-                                        &F4Point::Alpha,
-                                        &F4Point::Beta,
-                                    ]) * &*foursome_perm;
+                                    *foursome_perm = foursome_perm.compose(
+                                        &ConstSizePermutation::new_cycle(vec![
+                                            F4::One,
+                                            F4::Alpha,
+                                            F4::Beta,
+                                        ])
+                                        .unwrap(),
+                                    );
                                 }
                             }
                             if ui.button("Conjugate").clicked() {
                                 for foursome_perm in
                                     &mut self.sextet_stabilizer_permutation.inner_permutations
                                 {
-                                    *foursome_perm =
-                                        &Permutation::new_swap(&F4Point::Alpha, &F4Point::Beta)
-                                            * &*foursome_perm;
+                                    *foursome_perm = foursome_perm.compose(
+                                        &ConstSizePermutation::new_swap(F4::Alpha, F4::Beta)
+                                            .unwrap(),
+                                    );
                                 }
                             }
                         });
@@ -678,32 +737,40 @@ Configure permutations which preserve the unordered sextet",
                                         .inner_permutations[item.index()];
 
                                     if ui.button("+1").clicked() {
-                                        *foursome_perm =
-                                            &Permutation::new_swap(&F4Point::Zero, &F4Point::One)
-                                                * &*foursome_perm;
-                                        *foursome_perm =
-                                            &Permutation::new_swap(&F4Point::Alpha, &F4Point::Beta)
-                                                * &*foursome_perm;
+                                        *foursome_perm = foursome_perm.compose(
+                                            &ConstSizePermutation::new_swap(F4::Zero, F4::One)
+                                                .unwrap(),
+                                        );
+                                        *foursome_perm = foursome_perm.compose(
+                                            &ConstSizePermutation::new_swap(F4::Alpha, F4::Beta)
+                                                .unwrap(),
+                                        );
                                     }
                                     if ui.button("+ω").clicked() {
-                                        *foursome_perm =
-                                            &Permutation::new_swap(&F4Point::Zero, &F4Point::Alpha)
-                                                * &*foursome_perm;
-                                        *foursome_perm =
-                                            &Permutation::new_swap(&F4Point::One, &F4Point::Beta)
-                                                * &*foursome_perm;
+                                        *foursome_perm = foursome_perm.compose(
+                                            &ConstSizePermutation::new_swap(F4::Zero, F4::Alpha)
+                                                .unwrap(),
+                                        );
+                                        *foursome_perm = foursome_perm.compose(
+                                            &ConstSizePermutation::new_swap(F4::One, F4::Beta)
+                                                .unwrap(),
+                                        );
                                     }
                                     if ui.button("×ω").clicked() {
-                                        *foursome_perm = &Permutation::new_cycle(vec![
-                                            &F4Point::One,
-                                            &F4Point::Alpha,
-                                            &F4Point::Beta,
-                                        ]) * &*foursome_perm;
+                                        *foursome_perm = foursome_perm.compose(
+                                            &ConstSizePermutation::new_cycle(vec![
+                                                F4::One,
+                                                F4::Alpha,
+                                                F4::Beta,
+                                            ])
+                                            .unwrap(),
+                                        );
                                     }
                                     if ui.button("Conjugate").clicked() {
-                                        *foursome_perm =
-                                            &Permutation::new_swap(&F4Point::Alpha, &F4Point::Beta)
-                                                * &*foursome_perm;
+                                        *foursome_perm = foursome_perm.compose(
+                                            &ConstSizePermutation::new_swap(F4::Alpha, F4::Beta)
+                                                .unwrap(),
+                                        );
                                     }
                                 });
                                 if state.index == 1 || state.index == 3 {
@@ -716,7 +783,7 @@ Configure permutations which preserve the unordered sextet",
                     if let Some(permutation) = permutation.as_ref()
                         && let Some(new_state) = ui
                             .horizontal(|ui| {
-                                let mut is_aut = mog().is_automorphism(permutation);
+                                let mut is_aut = permutation.is_ebgc_automorphism();
                                 let text = if is_aut {
                                     "This permutation is an automorphism"
                                 } else {
@@ -727,7 +794,7 @@ Configure permutations which preserve the unordered sextet",
                                 if ui.button("Select").clicked() {
                                     return Some(Box::<dyn AppState>::from(Box::new(
                                         crate::app::ui::point_toggle::State::new(
-                                            Labelled::zero(),
+                                            Vector::zero(),
                                             permutation.clone(),
                                         ),
                                     )));
@@ -747,17 +814,12 @@ Configure permutations which preserve the unordered sextet",
             return Some(new_state);
         }
 
-        let point_to_cell = |p: Point| -> GridCell {
-            let i = p.point_to_usize();
-            (i as isize % 6, i as isize / 6)
-        };
-
         let mut grid_builder = super::grid::GridBuilder::default();
 
         // The 6x4 MOG grid
         for foursome in &self.sextet {
             for p in foursome.points() {
-                grid_builder.include_cell(point_to_cell(p));
+                grid_builder.include_cell(point_to_grid_cell(&p));
             }
         }
 
@@ -767,7 +829,7 @@ Configure permutations which preserve the unordered sextet",
             // The 6x4 MOG grid
             for (foursome_idx, foursome) in self.sextet.iter().enumerate() {
                 for p in foursome.points() {
-                    let rect = grid.cell_to_rect(point_to_cell(p));
+                    let rect = grid.cell_to_rect(point_to_grid_cell(&p));
 
                     let colour = sextet_idx_to_colour(foursome_idx);
 
@@ -782,12 +844,12 @@ Configure permutations which preserve the unordered sextet",
                     if let Some(pos) = response.hover_pos()
                         && rect.contains(pos)
                     {
-                        hovered_point = Some(p);
+                        hovered_point = Some(p.clone());
                     }
 
                     // Draw a border when dragging to indicate a label can be set here
                     if response.is_pointer_button_down_on()
-                        && (!allowed_labels.get(p).is_empty() || self.labelling.get(p).is_some())
+                        && (!allowed_labels.get(&p).is_empty() || self.labelling.get(&p).is_some())
                     {
                         painter.rect_stroke(
                             rect,
@@ -808,21 +870,21 @@ Configure permutations which preserve the unordered sextet",
                             &painter,
                             &response,
                             rect,
-                            allowed_labels.get(p).clone(),
-                            self.labelling.get(p).is_some(),
+                            allowed_labels.get(&p).clone(),
+                            self.labelling.get(&p).is_some(),
                         );
                         if response.drag_stopped() || response.clicked() {
                             match result {
                                 crate::app::ui::mog::F4SelectionResult::None => {}
                                 crate::app::ui::mog::F4SelectionResult::Point(label) => {
-                                    self.labelling.set(p, Some(label));
+                                    self.labelling.set(&p, Some(label));
                                 }
                                 crate::app::ui::mog::F4SelectionResult::Cross => {
-                                    self.labelling.set(p, None);
+                                    self.labelling.set(&p, None);
                                 }
                             }
                         }
-                    } else if let Some(label) = *self.labelling.get(p) {
+                    } else if let Some(label) = *self.labelling.get(&p) {
                         // Draw labels
                         draw_f4(ui, &painter, rect, ui.visuals().strong_text_color(), label);
                     } else if let Some(completed_labels) = completed_labels.clone() {
@@ -831,25 +893,21 @@ Configure permutations which preserve the unordered sextet",
                             &painter,
                             rect,
                             ui.visuals().text_color(),
-                            *completed_labels.labels().get(p),
+                            *completed_labels.labels().get(&p),
                         );
                     }
                 }
             }
 
             // Draw the selected permutation
-            let cell_permutation = permutation
-                .clone()
-                .map(|permutation| permutation.map_injective_unchecked(point_to_cell));
-
-            self.permutation_shapes
-                .set_permutation(cell_permutation, grid);
+            self.permutation_shapes.set_permutation(permutation, grid);
 
             let colour = ui.visuals().strong_text_color();
 
-            for (cycle, shape) in self.permutation_shapes.shapes() {
-                let colour = if let Some(p) = hovered_point
-                    && cycle.contains(&point_to_cell(p))
+            for (source, shape) in self.permutation_shapes.sources_and_shapes() {
+                let colour = if let Some(p) = &hovered_point
+                    && let ShapeSource::Cycle(cycle) = source
+                    && cycle.contains(&point_to_grid_cell(p))
                 {
                     colour
                 } else {

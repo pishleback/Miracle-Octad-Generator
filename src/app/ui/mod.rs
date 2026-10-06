@@ -1,21 +1,13 @@
-pub mod mog_permutation_shapes;
+pub mod mog_arrow_shapes;
+pub mod permutation_finder;
 pub mod point_toggle;
 pub mod sextet_labelling;
 pub mod shape;
 
 mod mog {
+    use algebraeon::rings::finite_fields::quaternary_field::QuaternaryField as F4;
     use eframe::egui::{Color32, Rect};
     use std::collections::HashSet;
-    use std::sync::OnceLock;
-
-    use crate::app::logic::finite_field_4::Point as F4Point;
-    use crate::app::logic::miracle_octad_generator::BinaryGolayCode;
-
-    static MOG: OnceLock<BinaryGolayCode> = OnceLock::new();
-
-    pub fn mog() -> &'static BinaryGolayCode {
-        MOG.get_or_init(BinaryGolayCode::default)
-    }
 
     // Draw an F4 element
     pub fn draw_f4(
@@ -23,10 +15,10 @@ mod mog {
         painter: &eframe::egui::Painter,
         rect: eframe::egui::Rect,
         colour: Color32,
-        x: F4Point,
+        x: F4,
     ) {
         let label_size = 0.7 * rect.height();
-        if x == F4Point::Beta {
+        if x == F4::Beta {
             painter.text(
                 rect.center()
                     + eframe::egui::Vec2 {
@@ -43,21 +35,21 @@ mod mog {
             rect.center(),
             eframe::egui::Align2::CENTER_CENTER,
             match x {
-                F4Point::Zero => "0",
-                F4Point::One => "1",
-                F4Point::Alpha | F4Point::Beta => "ω",
+                F4::Zero => "0",
+                F4::One => "1",
+                F4::Alpha | F4::Beta => "ω",
             },
             eframe::egui::FontId::proportional(label_size),
             colour,
         );
     }
 
-    pub fn row_to_f4(r: usize) -> F4Point {
+    pub fn row_to_f4(r: usize) -> F4 {
         match r {
-            0 => F4Point::Zero,
-            1 => F4Point::One,
-            2 => F4Point::Alpha,
-            3 => F4Point::Beta,
+            0 => F4::Zero,
+            1 => F4::One,
+            2 => F4::Alpha,
+            3 => F4::Beta,
             _ => unreachable!(),
         }
     }
@@ -77,7 +69,7 @@ mod mog {
     #[derive(Debug)]
     pub enum F4SelectionResult {
         None,
-        Point(F4Point),
+        Point(F4),
         Cross,
     }
 
@@ -86,7 +78,7 @@ mod mog {
         painter: &eframe::egui::Painter,
         response: &eframe::egui::Response,
         rect: eframe::egui::Rect,
-        include: impl Into<HashSet<F4Point>>,
+        include: impl Into<HashSet<F4>>,
         include_cross: bool,
     ) -> F4SelectionResult {
         let include = include.into();
@@ -98,10 +90,10 @@ mod mog {
         let middle = Rect::from_center_size(rect.center(), rect.size() / 3.0);
 
         let point_rects = [
-            (F4Point::Zero, top_left),
-            (F4Point::One, top_right),
-            (F4Point::Alpha, bottom_left),
-            (F4Point::Beta, bottom_right),
+            (F4::Zero, top_left),
+            (F4::One, top_right),
+            (F4::Alpha, bottom_left),
+            (F4::Beta, bottom_right),
         ]
         .into_iter()
         .filter(|(point, _)| include.contains(point))

@@ -1,4 +1,3 @@
-pub mod logic;
 mod ui;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
